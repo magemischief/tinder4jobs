@@ -1,0 +1,54 @@
+# Virtual environments
+job-env/
+venv/
+env/
+.env
+
+# Database
+*.sqlite3
+*.db
+*.sqlite
+
+# State files
+daemon_state.json
+scrape_checkpoint.json
+linkedin_state.json
+daemon.lock
+
+# Logs
+logs/
+*.log
+daemon.log
+
+# Output files
+output/
+*.pdf
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+config.ini
+
+# Environment
+.env
+*.env
+
+scripts/
+writing_samples.txt
+blacklist.config
+credentials.json

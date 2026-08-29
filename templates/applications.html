@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Application Manager · Jobhunt{% endblock %}
+
+{% block content %}
+<section class="page">
+  <header class="page-header">
+    <div>
+      <h1>Application Manager</h1>
+      <p class="text-muted">Jobs marked "Ready to Apply"</p>
+    </div>
+    <input
+      id="search-input"
+      type="search"
+      class="search-input"
+      placeholder="Filter by title, company, location..."
+    />
+  </header>
+
+  <div class="table-card">
+    <table>
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Company</th>
+          <th>Location</th>
+          <th>Salary</th>
+          <th>Found</th>
+          <th>Link</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="applications-tbody"></tbody>
+    </table>
+    <div id="applications-empty" class="empty-state hidden">
+      <div class="empty-icon">📭</div>
+      <h2>No jobs ready to apply</h2>
+      <p>Like matching jobs on the Swipe Review page first.</p>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/applications.js') }}"></script>
+{% endblock %}

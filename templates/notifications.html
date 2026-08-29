@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications · Jobhunt{% endblock %}
+
+{% block content %}
+<section class="page">
+  <header class="page-header">
+    <div>
+      <h1>Notifications</h1>
+      <p class="text-muted">Active communication alerts from jobcheck.py</p>
+    </div>
+  </header>
+
+  <div id="notification-banner" class="notification-banner hidden" role="alert"></div>
+
+  <div id="notifications-list" class="notification-grid"></div>
+
+  <div id="notifications-empty" class="empty-state hidden">
+    <div class="empty-icon">✅</div>
+    <h2>No active alerts</h2>
+    <p>No jobs are currently flagged as awaiting response.</p>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
+{% endblock %}

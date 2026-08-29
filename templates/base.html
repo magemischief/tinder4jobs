@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Jobhunt{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="brand">Jobhunt</div>
+    <a href="{{ url_for('swipe_page') }}" {% if active_page == 'swipe' %}class="active"{% endif %}>
+      Swipe Review
+    </a>
+    <a href="{{ url_for('applications_page') }}" {% if active_page == 'applications' %}class="active"{% endif %}>
+      Application Manager
+    </a>
+    <a href="{{ url_for('notifications_page') }}" {% if active_page == 'notifications' %}class="active"{% endif %}>
+      Notifications
+    </a>
+  </nav>
+
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

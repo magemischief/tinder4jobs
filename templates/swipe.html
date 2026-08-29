@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Swipe Review · Jobhunt{% endblock %}
+
+{% block content %}
+<section class="page swipe-page">
+  <header class="page-header">
+    <div>
+      <h1>Swipe Review</h1>
+      <p class="text-muted">Review new postings from Jobhunt.py</p>
+    </div>
+    <div class="queue-count">
+      <span id="queue-count">0</span> remaining
+    </div>
+  </header>
+
+  <div class="swipe-stage">
+    <div id="card-container" class="card-container" aria-live="polite"></div>
+    <div id="empty-state" class="empty-state hidden">
+      <div class="empty-icon">✓</div>
+      <h2>Queue cleared</h2>
+      <p>There are no more jobs waiting in the review queue.</p>
+      <button id="refresh-queue" class="btn btn-secondary">Reload queue</button>
+    </div>
+  </div>
+
+  <div id="actions" class="actions" hidden>
+    <button id="dislike-btn" class="action-btn danger" type="button" aria-label="Dislike job">
+      <span class="action-icon">✕</span>
+      <span>Dislike</span>
+    </button>
+    <button id="unsure-btn" class="action-btn neutral" type="button" aria-label="Unsure about job">
+      <span class="action-icon">?</span>
+      <span>Unsure</span>
+    </button>
+    <button id="like-btn" class="action-btn primary" type="button" aria-label="Like job">
+      <span class="action-icon">♥</span>
+      <span>Like</span>
+    </button>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/swipe.js') }}"></script>
+{% endblock %}
