@@ -13,8 +13,8 @@ from contextlib import closing
 from pathlib import Path
 
 # Use JOBHUNT_DB if set; otherwise use the SQLite file next to this module.
-DB_PATH = Path(os.environ.get("JOBHUNT_DB", Path(__file__).resolve().parent / "jobs.sqlite3"))
-
+DB_PATH = Path(os.environ.get("JOBHUNT_DB", Path(__file__).resolve().parent.parent / "jobs.sqlite3"))
+print(DB_PATH)
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     follow_up_sent TEXT,
     salary_offered TEXT,
     not_interested_checked INTEGER NOT NULL DEFAULT 0,
+    unsure INTEGER NOT NULL DEFAULT 0,
+    is_modified INTEGER NOT NULL DEFAULT 0,
     preference_added INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -65,8 +67,14 @@ CREATE INDEX IF NOT EXISTS idx_preferences_preference ON job_preferences(prefere
 """
 
 # Additive migrations only: these columns may already exist in a deployed DB.
-ADDITIVE_COLUMNS: dict[str, list[str]] = {
-    "jobs": ["submitted_resume", "submitted_cover_letter"],
+# Use explicit SQLite types/defaults so missing columns are added safely to an existing DB.
+ADDITIVE_COLUMNS: dict[str, list[tuple[str, str]]] = {
+    "jobs": [
+        ("submitted_resume", "TEXT"),
+        ("submitted_cover_letter", "TEXT"),
+        ("unsure", "INTEGER NOT NULL DEFAULT 0"),
+        ("is_modified", "INTEGER NOT NULL DEFAULT 0"),
+    ],
 }
 
 
@@ -79,15 +87,17 @@ def get_connection() -> sqlite3.Connection:
 
 
 def _ensure_columns(conn: sqlite3.Connection) -> None:
-    """Add missing columns without touching existing data."""
+    """Add missing columns to existing tables without dropping data."""
     for table, columns in ADDITIVE_COLUMNS.items():
         existing = {
             row["name"]
             for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
         }
-        for column in columns:
-            if column not in existing:
-                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} TEXT")
+        for column_name, column_type in columns:
+            if column_name not in existing:
+                conn.execute(
+                    f"ALTER TABLE {table} ADD COLUMN {column_name} {column_type}"
+                )
 
 
 def init_db() -> None:

@@ -31,23 +31,94 @@ def _job_row_to_dict(row: sqlite3.Row, conn: sqlite3.Connection) -> dict[str, An
     return job
 
 
-def get_review_queue(limit: int = 100) -> list[dict[str, Any]]:
-    """Return jobs still waiting in the raw review queue."""
+def _description_quality_score(description: Any) -> int:
+    """Higher score indicates a fuller, non-placeholder description."""
+    raw = str(description or "").strip()
+    if not raw:
+        return 0
+
+    lowered = raw.lower()
+    placeholders = {"none", "n/a", "na", "not specified", "no description provided"}
+    if lowered in placeholders or lowered.startswith("none"):
+        return 0
+
+    cleaned = " ".join(raw.split())
+    if len(cleaned) >= 200:
+        return 2
+    if len(cleaned) >= 50:
+        return 1
+    return 0
+
+
+def get_review_queue(
+    limit: int = 100,
+    location: Optional[str] = None,
+    job_type: Optional[str] = None,
+) -> list[dict[str, Any]]:
+    """Return jobs still waiting in the raw review queue, prioritizing real descriptions."""
     safe_limit = max(1, min(int(limit), 500))
+    location = (location or "").strip()
+    job_type = (job_type or "").strip()
+
+    query = f"""
+        SELECT {_JOB_FIELDS},
+               CASE
+                   WHEN j.description IS NULL OR TRIM(j.description) = '' THEN 0
+                   WHEN LOWER(TRIM(j.description)) IN ('none', 'n/a', 'na', 'not specified', 'no description provided') THEN 0
+                   WHEN LENGTH(TRIM(j.description)) >= 200 THEN 2
+                   WHEN LENGTH(TRIM(j.description)) >= 50 THEN 1
+                   ELSE 0
+               END AS description_score
+        FROM jobs j
+        WHERE j.status = ?
+    """
+    params: list[Any] = [REVIEW_STATUS]
+
+    if location:
+        query += " AND j.source_tab = ?"
+        params.append(location)
+
+    if job_type:
+        query += " AND j.track = ?"
+        params.append(job_type)
+
+    query += " ORDER BY description_score DESC, j.date_found IS NULL, j.date_found ASC, j.id ASC LIMIT ?"
+    params.append(safe_limit)
 
     with closing(get_connection()) as conn:
-        rows = conn.execute(
-            f"""
-            SELECT {_JOB_FIELDS}
-            FROM jobs j
-            WHERE j.status = ?
-            ORDER BY j.date_found IS NULL, j.date_found ASC, j.id ASC
-            LIMIT ?
-            """,
-            (REVIEW_STATUS, safe_limit),
-        ).fetchall()
-
+        rows = conn.execute(query, params).fetchall()
         return [_job_row_to_dict(row, conn) for row in rows]
+
+
+def get_review_filter_options() -> dict[str, list[str]]:
+    """Return distinct values for the review-page filters."""
+    with closing(get_connection()) as conn:
+        locations = [
+            row["source_tab"]
+            for row in conn.execute(
+                """
+                SELECT DISTINCT source_tab
+                FROM jobs
+                WHERE status = ? AND source_tab IS NOT NULL AND TRIM(source_tab) != ''
+                ORDER BY source_tab
+                """,
+                (REVIEW_STATUS,),
+            ).fetchall()
+        ]
+        job_types = [
+            row["track"]
+            for row in conn.execute(
+                """
+                SELECT DISTINCT track
+                FROM jobs
+                WHERE status = ? AND track IS NOT NULL AND TRIM(track) != ''
+                ORDER BY track
+                """,
+                (REVIEW_STATUS,),
+            ).fetchall()
+        ]
+
+    return {"locations": locations, "job_types": job_types}
 
 
 def get_job_by_id(job_id: int) -> Optional[dict[str, Any]]:
@@ -110,6 +181,53 @@ def apply_swipe_action(job_id: int, action: str) -> str:
         conn.commit()
 
     return new_status
+
+
+def mark_job_unsure(job_id: int) -> bool:
+    """Remove the current item from review by marking it unsure."""
+    with closing(get_connection()) as conn:
+        cursor = conn.execute(
+            """
+            UPDATE jobs
+            SET status = ?, unsure = 1, not_interested_checked = 1, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND status = ?
+            """,
+            (NOT_INTERESTED_STATUS, job_id, REVIEW_STATUS),
+        )
+
+        if cursor.rowcount == 0:
+            current = conn.execute("SELECT status FROM jobs WHERE id = ?", (job_id,)).fetchone()
+            if current is None:
+                raise KeyError("Job not found")
+            raise ValueError(f"Job is no longer in the review queue (current status: {current['status']})")
+
+        conn.commit()
+
+    return True
+
+
+def reclassify_job_track(job_id: int, new_track: str) -> str:
+    """Update the job's track classification to a different value."""
+    track_value = (new_track or "").strip()
+    if not track_value:
+        raise ValueError("Track cannot be empty")
+
+    with closing(get_connection()) as conn:
+        cursor = conn.execute(
+            """
+            UPDATE jobs
+            SET track = ?, is_modified = 1, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (track_value, job_id),
+        )
+
+        if cursor.rowcount == 0:
+            raise KeyError("Job not found")
+
+        conn.commit()
+
+    return track_value
 
 
 def get_ready_to_apply(search: Optional[str] = None) -> list[dict[str, Any]]:

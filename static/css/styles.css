@@ -99,6 +99,43 @@ h1 {
   font-weight: 700;
 }
 
+.filter-bar {
+  display: flex;
+  align-items: end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 180px;
+}
+
+.filter-group label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.filter-select {
+  min-width: 180px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.95rem;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -140,8 +177,8 @@ h1 {
 
 .card-container {
   position: relative;
-  width: min(640px, 100%);
-  height: 480px;
+  width: min(700px, 100%);
+  height: 680px;
 }
 
 .job-card {
@@ -193,6 +230,7 @@ h1 {
   align-items: center;
   padding: 20px 24px;
   border-bottom: 1px solid var(--border);
+  min-height: 72px;
 }
 
 .badge {
@@ -212,50 +250,60 @@ h1 {
 }
 
 .card-body {
-  padding: 24px;
+  padding: 20px 24px 0;
   flex: 1;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  gap: 6px;
 }
 
 .card-body h2 {
-  font-size: 1.5rem;
-  margin: 0 0 8px;
-  line-height: 1.25;
+  font-size: clamp(2rem, 2.5vw, 2.8rem);
+  margin: 0;
+  line-height: 1.15;
+  letter-spacing: -0.04em;
 }
 
 .card-body h3 {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   color: var(--muted);
-  margin: 0 0 8px;
+  margin: 0;
 }
 
 .card-location {
   color: var(--muted);
-  margin: 0 0 8px;
+  margin: 0;
+  font-size: 1.05rem;
 }
 
 .card-salary {
   color: var(--success);
   font-weight: 700;
-  margin: 0 0 8px;
+  margin: 0;
 }
 
 .card-link {
   color: var(--primary);
   font-weight: 600;
   text-decoration: none;
+  display: inline-block;
+  margin: 4px 0 0;
 }
 
 .card-description {
-  margin-top: 16px;
-  padding-top: 16px;
+  margin-top: 12px;
+  padding-top: 18px;
   border-top: 1px solid var(--border);
   color: #334155;
   white-space: pre-wrap;
-  max-height: 180px;
+  min-height: 140px;
+  max-height: 220px;
   overflow-y: auto;
-  font-size: 0.9rem;
-  line-height: 1.5;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  flex: 1 1 auto;
 }
 
 .card-footer {
@@ -265,6 +313,44 @@ h1 {
   border-top: 1px solid var(--border);
   color: var(--muted);
   font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.card-reclassify {
+  padding: 16px 24px 24px;
+  border-top: 1px solid var(--border);
+  background: #f8fafc;
+  flex-shrink: 0;
+}
+
+.card-reclassify label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.track-input-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.track-select {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.95rem;
+}
+
+.track-save-btn {
+  padding: 10px 14px;
+  white-space: nowrap;
 }
 
 /* Action buttons */

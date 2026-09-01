@@ -13,6 +13,24 @@
       <span id="queue-count">0</span> remaining
     </div>
   </header>
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label for="location-filter">Location</label>
+      <select id="location-filter" class="filter-select">
+        <option value="">All locations</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label for="job-type-filter">Job type</label>
+      <select id="job-type-filter" class="filter-select">
+        <option value="">All job types</option>
+      </select>
+    </div>
+    <button id="clear-filters" class="btn btn-secondary" type="button">Clear filters</button>
+  </div>
+
+  <div class="queue-progress">
+    <div id="queue-progress-bar" class="queue-progress-bar"></div>
 
   <div class="swipe-stage">
     <div id="card-container" class="card-container" aria-live="polite"></div>

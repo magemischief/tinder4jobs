@@ -2,11 +2,43 @@ const state = {
   queue: [],
   current: null,
   busy: false,
+  filters: {
+    location: '',
+    job_type: '',
+  },
+  trackOptions: [],
 };
+
+function getFilterValues() {
+  return {
+    location: document.getElementById('location-filter')?.value || '',
+    job_type: document.getElementById('job-type-filter')?.value || '',
+  };
+}
 
 function updateCount() {
   const el = document.getElementById('queue-count');
   if (el) el.textContent = String(state.queue.length);
+}
+
+function populateFilterOptions(options = { locations: [], job_types: [] }) {
+  const locationSelect = document.getElementById('location-filter');
+  const jobTypeSelect = document.getElementById('job-type-filter');
+  if (!locationSelect || !jobTypeSelect) return;
+
+  state.trackOptions = Array.isArray(options.job_types) ? options.job_types : [];
+
+  const currentLocation = state.filters.location || locationSelect.value || '';
+  const currentJobType = state.filters.job_type || jobTypeSelect.value || '';
+
+  locationSelect.innerHTML = '<option value="">All locations</option>' +
+    options.locations.map((value) => `<option value="${escapeHTML(value)}">${escapeHTML(value)}</option>`).join('');
+  jobTypeSelect.innerHTML = '<option value="">All job types</option>' +
+    options.job_types.map((value) => `<option value="${escapeHTML(value)}">${escapeHTML(value)}</option>`).join('');
+
+  locationSelect.value = options.locations.includes(currentLocation) ? currentLocation : '';
+  jobTypeSelect.value = options.job_types.includes(currentJobType) ? currentJobType : '';
+  state.filters = getFilterValues();
 }
 
 function renderCard() {
@@ -37,6 +69,12 @@ function renderCard() {
     ? `<a class="card-link" href="${escapeHTML(rawLink)}" target="_blank" rel="noopener noreferrer">View original posting →</a>`
     : '';
 
+  const availableTracks = [...new Set([...(state.trackOptions || []), job.track].filter(Boolean))];
+  const trackOptionsMarkup = availableTracks.map((value) => {
+    const safeValue = escapeHTML(value);
+    return `<option value="${safeValue}">${safeValue}</option>`;
+  }).join('');
+
   container.innerHTML = `
     <article class="job-card enter" data-job-id="${job.id}">
       <div class="card-top">
@@ -56,8 +94,49 @@ function renderCard() {
         <span>Row ${job.source_row ?? '—'}</span>
         <span>${track || ''}</span>
       </div>
+      <div class="card-reclassify">
+        <label for="track-reclassify">Reclassify track</label>
+        <div class="track-input-row">
+          <select id="track-reclassify" class="track-select">
+            ${trackOptionsMarkup}
+          </select>
+          <button type="button" class="btn btn-secondary track-save-btn">Save</button>
+        </div>
+      </div>
     </article>
   `;
+
+  const saveButton = container.querySelector('.track-save-btn');
+  const trackSelect = container.querySelector('#track-reclassify');
+  if (saveButton && trackSelect) {
+    saveButton.addEventListener('click', async () => {
+      const selectedTrack = trackSelect.value.trim();
+      if (!selectedTrack) {
+        showToast('Choose a track before saving.', 'warning');
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/jobs/${job.id}/reclassify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ track: selectedTrack }),
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.error || 'Could not update track');
+        }
+
+        showToast(`Track updated to ${selectedTrack}`, 'success');
+        state.filters.job_type = selectedTrack;
+        await loadFilterOptions();
+        await loadQueue();
+      } catch (error) {
+        showToast(error.message, 'error');
+      }
+    });
+  }
 
   updateCount();
 }
@@ -81,9 +160,7 @@ async function handleAction(action) {
 
   if (action === 'unsure') {
     const wasLast = state.queue.length <= 1;
-    // No DB write. The card goes to the back of the runtime queue array.
     state.queue.shift();
-    state.queue.push(job);
     await animateCardExit('unsure');
     renderCard();
     state.busy = false;
@@ -126,10 +203,27 @@ async function handleAction(action) {
   state.busy = false;
 }
 
+async function loadFilterOptions() {
+  try {
+    const response = await fetch('/api/review/filter-options');
+    if (!response.ok) throw new Error('Failed to load filter options');
+    const options = await response.json();
+    populateFilterOptions(options);
+  } catch (error) {
+    console.error('Could not load filter options:', error);
+  }
+}
+
 async function loadQueue() {
   state.busy = true;
+  state.filters = getFilterValues();
+
+  const params = new URLSearchParams();
+  if (state.filters.location) params.set('location', state.filters.location);
+  if (state.filters.job_type) params.set('job_type', state.filters.job_type);
+
   try {
-    const response = await fetch('/api/review/queue?limit=200');
+    const response = await fetch(`/api/review/queue?${params.toString()}`);
     if (!response.ok) throw new Error('Failed to load queue');
     const data = await response.json();
     state.queue = data.jobs || [];
@@ -152,6 +246,13 @@ async function loadQueue() {
 document.getElementById('like-btn').addEventListener('click', () => handleAction('like'));
 document.getElementById('dislike-btn').addEventListener('click', () => handleAction('dislike'));
 document.getElementById('unsure-btn').addEventListener('click', () => handleAction('unsure'));
-document.getElementById('refresh-queue').addEventListener('click', loadQueue);
+document.getElementById('refresh-queue').addEventListener('click', () => loadQueue());
+document.getElementById('location-filter').addEventListener('change', loadQueue);
+document.getElementById('job-type-filter').addEventListener('change', loadQueue);
+document.getElementById('clear-filters').addEventListener('click', () => {
+  document.getElementById('location-filter').value = '';
+  document.getElementById('job-type-filter').value = '';
+  loadQueue();
+});
 
-loadQueue();
+loadFilterOptions().then(loadQueue);

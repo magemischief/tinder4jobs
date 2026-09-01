@@ -7,6 +7,7 @@ async function loadApplications() {
     const res = await fetch(`/api/applications?q=${encodeURIComponent(search)}`);
     if (!res.ok) throw new Error('Failed to load applications');
     const data = await res.json();
+    console.log("Application data:", data);
     state.jobs = data.jobs || [];
     renderRows();
   } catch (error) {
