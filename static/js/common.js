@@ -99,7 +99,7 @@ async function initTheme() {
     if (serverTheme) applyTheme(serverTheme);
   } catch (e) { /* offline — keep cached theme */ }
 
-  const btn = document.getElementById('theme-toggle');
+  const btn = document.getElementById('topbar-theme-toggle');
   if (btn) {
     btn.addEventListener('click', () => {
       applyTheme(getTheme() === 'dark' ? 'light' : 'dark');

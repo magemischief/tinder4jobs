@@ -17,34 +17,36 @@
 
   function setupSidebarToggle() {
     const toggle = document.getElementById('sidebar-toggle');
+    const close = document.getElementById('sidebar-close');
     const sidebar = document.getElementById('sidebar');
-    const content = document.getElementById('main-content');
-    if (!toggle || !sidebar || !content) return;
+    if (!toggle || !sidebar) return;
 
-    const apply = (collapsed) => {
-      sidebar.classList.toggle('collapsed', collapsed);
-      content.classList.toggle('sidebar-collapsed', collapsed);
-      toggle.setAttribute('aria-expanded', String(!collapsed));
+    const setOpen = (isOpen) => {
+      sidebar.classList.toggle('open', isOpen);
+      toggle.setAttribute('aria-expanded', String(isOpen));
+      toggle.setAttribute('aria-label', isOpen ? 'Close navigation panel' : 'Open navigation panel');
+      toggle.title = isOpen ? 'Close navigation' : 'Open navigation';
     };
 
-    // Restore the saved rail state. Storage can throw in some privacy modes,
-    // so guard it — a storage failure must not kill the toggle binding.
-    let saved = null;
-    try { saved = localStorage.getItem('sidebar-collapsed'); } catch (_) {}
-    apply(saved === '1');
+    setOpen(false);
 
     // One delegated listener: survives any re-render of the button and can
     // never double-fire against a second listener bound to the button itself.
     document.addEventListener('click', (e) => {
-      if (!e.target.closest('#sidebar-toggle')) return;
-      const collapsed = !sidebar.classList.contains('collapsed');
-      apply(collapsed);
-      try { localStorage.setItem('sidebar-collapsed', collapsed ? '1' : '0'); } catch (_) {}
+      if (e.target.closest('#sidebar-toggle')) setOpen(!sidebar.classList.contains('open'));
+      if (e.target.closest('#sidebar-close')) setOpen(false);
+    });
+
+    sidebar.addEventListener('click', (e) => {
+      if (e.target.closest('a')) setOpen(false);
     });
   }
 
-  document.addEventListener('DOMContentLoaded', setupSidebarToggle);
-  setupSidebarToggle();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupSidebarToggle, { once: true });
+  } else {
+    setupSidebarToggle();
+  }
 
   // Track visible counts to detect changes and trigger animations
   const lastCounts = new Map();

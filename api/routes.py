@@ -292,7 +292,7 @@ def duplicate_candidates(job_id: int):
     return jsonify({"candidates": candidates, "count": len(candidates)})
 
 
-@api.get(\"/notifications\")
+@api.get("/notifications")
 def notifications():
     user, error = _require_user()
     if error:
@@ -677,4 +677,3 @@ def badges_live():
             "Content-Type": "text/event-stream; charset=utf-8",
         },
     )
-

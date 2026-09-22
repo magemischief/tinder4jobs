@@ -108,6 +108,20 @@ function applyAtsFilter(jobs) {
 function updateCount() {
   const el = document.getElementById('queue-count');
   if (el) el.textContent = String(state.queue.length);
+  const mobileEl = document.getElementById('mobile-queue-count');
+  if (mobileEl) mobileEl.textContent = String(state.queue.length);
+}
+
+function updateSwipeActionState() {
+  const canSwipe = Boolean(state.current) && !state.busy;
+  ['superdislike-btn', 'dislike-btn', 'unsure-btn', 'like-btn'].forEach((id) => {
+    const button = document.getElementById(id);
+    if (!button) return;
+    if (!button.dataset.defaultTitle) button.dataset.defaultTitle = button.title;
+    button.disabled = !canSwipe;
+    button.setAttribute('aria-disabled', String(!canSwipe));
+    button.title = canSwipe ? button.dataset.defaultTitle : 'No job in the queue';
+  });
 }
 
 function updateProgress() {
@@ -130,30 +144,38 @@ function updateProgress() {
 
 const TRACK_THEME = {
   'Software Engineer': {
-    accent: '#2563eb',
-    soft: 'rgba(37, 99, 235, 0.16)',
-    glow: 'rgba(37, 99, 235, 0.18)',
+    accent: '#3b82f6',
+    soft: 'rgba(59, 130, 246, 0.16)',
+    glow: 'rgba(59, 130, 246, 0.22)',
   },
   'Data Analyst': {
-    accent: '#0f766e',
-    soft: 'rgba(15, 118, 110, 0.16)',
-    glow: 'rgba(15, 118, 110, 0.18)',
+    accent: '#10b981',
+    soft: 'rgba(16, 185, 129, 0.16)',
+    glow: 'rgba(16, 185, 129, 0.22)',
   },
   'GIS/Spatial': {
-    accent: '#0284c7',
-    soft: 'rgba(2, 132, 199, 0.16)',
-    glow: 'rgba(2, 132, 199, 0.18)',
+    accent: '#06b6d4',
+    soft: 'rgba(6, 182, 212, 0.16)',
+    glow: 'rgba(6, 182, 212, 0.22)',
   },
   'Game Developer': {
-    accent: '#9333ea',
-    soft: 'rgba(147, 51, 234, 0.16)',
-    glow: 'rgba(147, 51, 234, 0.18)',
+    accent: '#a855f7',
+    soft: 'rgba(168, 85, 247, 0.16)',
+    glow: 'rgba(168, 85, 247, 0.22)',
   },
   'ML/AI': {
-    accent: '#db2777',
-    soft: 'rgba(219, 39, 119, 0.16)',
-    glow: 'rgba(219, 39, 119, 0.18)',
+    accent: '#f97316',
+    soft: 'rgba(249, 115, 22, 0.16)',
+    glow: 'rgba(249, 115, 22, 0.22)',
   },
+  engineering: { accent: '#3b82f6', soft: 'rgba(59, 130, 246, 0.16)', glow: 'rgba(59, 130, 246, 0.22)' },
+  data: { accent: '#10b981', soft: 'rgba(16, 185, 129, 0.16)', glow: 'rgba(16, 185, 129, 0.22)' },
+  design: { accent: '#ec4899', soft: 'rgba(236, 72, 153, 0.16)', glow: 'rgba(236, 72, 153, 0.22)' },
+  product: { accent: '#8b5cf6', soft: 'rgba(139, 92, 246, 0.16)', glow: 'rgba(139, 92, 246, 0.22)' },
+  marketing: { accent: '#f97316', soft: 'rgba(249, 115, 22, 0.16)', glow: 'rgba(249, 115, 22, 0.22)' },
+  sales: { accent: '#ef4444', soft: 'rgba(239, 68, 68, 0.16)', glow: 'rgba(239, 68, 68, 0.22)' },
+  operations: { accent: '#14b8a6', soft: 'rgba(20, 184, 166, 0.16)', glow: 'rgba(20, 184, 166, 0.22)' },
+  finance: { accent: '#eab308', soft: 'rgba(234, 179, 8, 0.16)', glow: 'rgba(234, 179, 8, 0.22)' },
   'not a fit': {
     accent: '#64748b',
     soft: 'rgba(100, 116, 139, 0.16)',
@@ -202,7 +224,8 @@ function getTrackTheme(track) {
   } else {
     return themeFromAccent(override);
   }
-  return TRACK_THEME[key] || {
+  const paletteKey = Object.keys(TRACK_THEME).find((name) => name.toLowerCase() === key.toLowerCase());
+  return (paletteKey && TRACK_THEME[paletteKey]) || {
     accent: '#4f46e5',
     soft: 'rgba(79, 70, 229, 0.16)',
     glow: 'rgba(79, 70, 229, 0.18)',
@@ -244,12 +267,16 @@ function renderCard() {
 
   if (!state.queue.length) {
     container.innerHTML = '';
+    state.current = null;
+    updateSwipeActionState();
     updateUndoButtonState();
+    updateCount();
     return;
   }
 
   const job = state.queue[0];
   state.current = job;
+  updateSwipeActionState();
 
   // Dedupe locations case-insensitively so a polluted DB cannot render the same
   // city ten times in a row (defense-in-depth for legacy rows).
@@ -337,7 +364,7 @@ function renderCard() {
           <details class="card-extras-panel">
             <summary>
               <span>More options</span>
-              <span class="card-meta">${escapeHTML(job.track || 'untracked')}${job.date_found ? `<span class="card-meta-dot">·</span><span class="text-muted">${escapeHTML(job.date_found)}</span>` : ''}</span>
+              <span class="track-pill">${escapeHTML(job.track || 'untracked')}</span>${job.date_found ? `<span class="card-meta-dot">·</span><span class="text-muted">${escapeHTML(job.date_found)}</span>` : ''}
             </summary>
             <div class="card-extras-body">
               <div class="card-reclassify">
@@ -479,6 +506,7 @@ async function undoLast() {
     showToast(err.message, 'error');
   } finally {
     state.busy = false;
+    updateSwipeActionState();
   }
 }
 
@@ -540,6 +568,7 @@ async function handleAction(action) {
   if (action === 'not-interested') action = 'dislike';
 
   state.busy = true;
+  updateSwipeActionState();
 
   const job = state.current;
   const wasLast = state.queue.length <= 1;
@@ -556,12 +585,14 @@ async function handleAction(action) {
   } catch (error) {
     showToast('Network error – could not update job', 'error');
     state.busy = false;
+    updateSwipeActionState();
     return;
   }
 
   if (!response.ok) {
     showToast(data.error || 'Could not update job', 'error');
     state.busy = false;
+    updateSwipeActionState();
     return;
   }
 
@@ -573,6 +604,7 @@ async function handleAction(action) {
   await animateCardExit(direction);
   renderCard();
   state.busy = false;
+  updateSwipeActionState();
   updateUndoButtonState();
 
   // Refresh today's counts (goal progress / energy guard) after the action.
@@ -625,6 +657,8 @@ async function loadFilterOptions() {
 
 async function loadQueue() {
   state.busy = true;
+  state.current = null;
+  updateSwipeActionState();
   state.filters = getFilterValues();
 
   const params = new URLSearchParams();
@@ -657,6 +691,7 @@ async function loadQueue() {
     hideSkeleton(document.getElementById('card-skeleton'));
   } finally {
     state.busy = false;
+    updateSwipeActionState();
   }
 }
 
@@ -665,7 +700,37 @@ function bindFilterChanges() {
   const filters = ['location-filter', 'job-type-filter', 'score-filter', 'ats-filter'];
   filters.forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.addEventListener('change', () => { state.filters = getFilterValues(); loadQueue(); });
+    if (el) el.addEventListener('change', () => {
+      state.filters = getFilterValues();
+      loadQueue();
+      setMobileFiltersOpen(false);
+    });
+  });
+}
+
+function setMobileFiltersOpen(open) {
+  const page = document.querySelector('.swipe-page');
+  const toggle = document.getElementById('mobile-filter-toggle');
+  if (!page || !toggle) return;
+  page.classList.toggle('mobile-filters-open', open);
+  toggle.setAttribute('aria-expanded', String(open));
+}
+
+function bindMobileFilterPopover() {
+  const toggle = document.getElementById('mobile-filter-toggle');
+  const filters = document.getElementById('swipe-filters');
+  if (!toggle || !filters) return;
+  toggle.addEventListener('click', () => {
+    setMobileFiltersOpen(!document.querySelector('.swipe-page')?.classList.contains('mobile-filters-open'));
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') setMobileFiltersOpen(false);
+  });
+  document.addEventListener('pointerdown', (event) => {
+    if (window.matchMedia('(max-width: 768px)').matches &&
+        !filters.contains(event.target) && !toggle.contains(event.target)) {
+      setMobileFiltersOpen(false);
+    }
   });
 }
 
@@ -1000,7 +1065,6 @@ function bindSwipeEvents() {
   bind('undo-btn', 'undo');
   bind('interested-btn', 'interested');
   bind('not-interested-btn', 'not-interested');
-  bind('help-btn', 'help');
 
   // Tracks edit — open the card's extras panel instead of navigating
   const tracksBtn = document.getElementById('tracks-edit-btn');
@@ -1037,6 +1101,7 @@ async function undoLast() {
     showToast(err.message, 'error');
   } finally {
     state.busy = false;
+    updateSwipeActionState();
     updateUndoButtonState();
   }
 }
@@ -1112,13 +1177,15 @@ function bindKeyboardShortcuts() {
 }
 
 function bindAddJob() {
-  const btn = document.getElementById('add-job-btn');
-  if (!btn) return;
-  btn.addEventListener('click', () => {
+  const buttons = ['add-job-btn', 'mobile-add-job-btn']
+    .map((id) => document.getElementById(id))
+    .filter(Boolean);
+  if (!buttons.length) return;
+  buttons.forEach((btn) => btn.addEventListener('click', () => {
     const modal = document.getElementById('add-job-modal');
     if (modal) modal.classList.remove('hidden');
     document.getElementById('add-job-title')?.focus();
-  });
+  }));
   const closeModal = () => {
     const modal = document.getElementById('add-job-modal');
     if (modal) modal.classList.add('hidden');
@@ -1166,8 +1233,10 @@ async function initSwipePage() {
   bindCardButtons();
   bindCardDrag();
   bindFilterChanges();
+  bindMobileFilterPopover();
   bindKeyboardShortcuts();
   bindAddJob();
+  updateSwipeActionState();
   await loadFilterOptions();
   loadQueue();
   loadPreferencesMeta();
@@ -1179,4 +1248,3 @@ if (document.readyState === 'loading') {
 } else {
   initSwipePage();
 }
-
