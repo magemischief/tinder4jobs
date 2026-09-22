@@ -7,26 +7,106 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
 </head>
 <body>
-  <nav class="sidebar">
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <!-- Top navigation bar -->
+  <div class="topbar" id="topbar">
+    <div class="topbar-left">
+      <span class="topbar-logo">Jobhunt</span>
+      <span class="topbar-version">Design System v3 — top bar</span>
+    </div>
+    <div class="topbar-center">
+      <div class="topbar-quick-stats">
+        <span class="topbar-stat" id="topbar-queue-count">0</span>
+        <span class="topbar-stat" id="topbar-progress">0/10</span>
+        <span class="topbar-stat topbar-stat--streak" id="topbar-streak" title="Streak">🔥 0</span>
+        <span class="topbar-stat topbar-stat--badges" id="topbar-badges" title="Badges earned">🏅 0</span>
+        <span class="topbar-stat topbar-stat--points" id="topbar-points" title="Total XP">⭐ 0</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-energy-indicator">
+        <span class="topbar-energy-label">Energy</span>
+        <div class="topbar-energy-bar">
+          <div class="topbar-energy-fill" id="topbar-energy-fill" style="width: 0%"></div>
+        </div>
+        <span class="topbar-energy-value" id="topbar-energy-value">0</span>
+      </div>
+      <button id="topbar-theme-toggle" class="topbar-btn" type="button" aria-label="Toggle theme">
+        <span aria-hidden="true">🌓</span>
+      </button>
+      <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Toggle sidebar">
+        <span aria-hidden="true">☰</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Existing sidebar -->
+  <nav class="sidebar" id="sidebar" aria-label="Main navigation">
     <div class="brand">Jobhunt</div>
-    <a href="{{ url_for('swipe_page') }}" {% if active_page == 'swipe' %}class="active"{% endif %}>
-      Swipe Review
-    </a>
-    <a href="{{ url_for('applications_page') }}" {% if active_page == 'applications' %}class="active"{% endif %}>
-      Application Manager
-    </a>
-    <a href="{{ url_for('notifications_page') }}" {% if active_page == 'notifications' %}class="active"{% endif %}>
-      Notifications
-    </a>
+
+    <div class="nav-group">
+      <a href="{{ url_for('swipe_page') }}" {% if active_page == 'swipe' %}class="active"{% endif %}>
+        <span class="nav-icon" aria-hidden="true">🔄</span> Swipe Review
+      </a>
+      <a href="{{ url_for('applications_page') }}" {% if active_page == 'applications' %}class="active"{% endif %}>
+        <span class="nav-icon" aria-hidden="true">📋</span> Applications <span id="apps-count" class="nav-badge" aria-label="ready to apply"></span>
+      </a>
+    </div>
+
+    <div class="nav-group">
+      <span class="nav-group-label">Follow-up</span>
+      <a href="{{ url_for('notifications_page') }}" {% if active_page == 'notifications' %}class="active"{% endif %}>
+        <span class="nav-icon" aria-hidden="true">🔔</span> Notifications <span id="notif-count" class="nav-badge" aria-label="unread notifications"></span>
+      </a>
+      <a href="{{ url_for('interviews_page') }}" {% if active_page == 'interviews' %}class="active"{% endif %}>
+        <span class="nav-icon" aria-hidden="true">📅</span> Interviews <span id="interview-count" class="nav-badge" aria-label="upcoming interviews"></span>
+      </a>
+    </div>
+
+    <div class="nav-group">
+      <span class="nav-group-label">Network</span>
+      <a href="{{ url_for('contacts_page') }}" {% if active_page == 'contacts' %}class="active"{% endif %}>
+        <span class="nav-icon" aria-hidden="true">👥</span> Contacts
+      </a>
+      <a href="{{ url_for('skills_page') }}" {% if active_page == 'skills' %}class="active"{% endif %}>
+        <span class="nav-icon" aria-hidden="true">🎯</span> Skills
+      </a>
+    </div>
+
+    <div class="nav-group">
+      <span class="nav-group-label">Insights</span>
+      <a href="{{ url_for('analytics_page') }}" {% if active_page == 'analytics' %}class="active"{% endif %}>
+        <span class="nav-icon" aria-hidden="true">📊</span> Analytics
+      </a>
+      <a href="{{ url_for('profile_page') }}" {% if active_page == 'profile' %}class="active"{% endif %}>
+        <span class="nav-icon" aria-hidden="true">👤</span> Profile
+      </a>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="user-avatar" aria-hidden="true">{{ (current_user.username[0] | upper) if current_user and current_user.username else '?' }}</div>
+      <div class="user-info">
+        <span class="user-name">{{ current_user.username if current_user else '' }}</span>
+      </div>
+      <form id="logout-form" action="{{ url_for('auth.logout') }}" method="POST" style="margin:0">
+        <button type="submit" class="logout-btn">Sign out</button>
+      </form>
+    </div>
   </nav>
 
-  <main class="content">
+  <main class="content" id="main-content">
     {% block content %}{% endblock %}
   </main>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle dark/light theme">🌓</button>
+
   <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/nav.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

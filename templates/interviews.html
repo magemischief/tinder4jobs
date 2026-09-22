@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Interviews · Jobhunt{% endblock %}
+
+{% block content %}
+<section class="page data-page">
+  <header class="page-header">
+    <div>
+      <h1>Interview Prep</h1>
+      <p class="text-muted">Upcoming interviews and prep notes</p>
+    </div>
+  </header>
+
+  <form id="new-interview-form" class="new-form">
+    <input type="hidden" name="job_id" id="interview-job-id" value="" />
+    <input type="hidden" name="interview_id" id="interview-edit-id" value="" />
+    <input type="text" name="company" id="interview-company" placeholder="Company" required />
+    <input type="text" name="role" id="interview-role" placeholder="Role" required />
+    <input type="date" name="interview_date" placeholder="Interview date" />
+    <input type="date" name="follow_up_at" placeholder="Follow-up date" />
+    <textarea name="prep_notes" placeholder="Prep notes"></textarea>
+    <button class="btn btn-primary" type="submit" id="interview-submit-btn">Add / Update</button>
+    <button class="btn btn--ghost btn--sm" type="button" id="interview-cancel-edit" style="display:none">Cancel edit</button>
+  </form>
+
+  <div id="prefill-banner" class="prefill-banner hidden">
+    <span>📋 Pre-filled from notification — review and save to add to your interview list.</span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Role</th>
+          <th>Interview Date</th>
+          <th>Follow-up</th>
+          <th>Prep Notes</th>
+          <th>Questions to Ask</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="interviews-tbody"></tbody>
+    </table>
+  </div>
+  <div id="interviews-empty" class="empty-state hidden">
+    <div class="empty-icon">🎤</div>
+    <h2>No upcoming interviews</h2>
+    <p>Add interview prep entries to stay organized.</p>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/interviews.js') }}"></script>
+{% endblock %}

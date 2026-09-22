@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Skills · Jobhunt{% endblock %}
+
+{% block content %}
+<section class="page data-page">
+  <header class="page-header">
+    <div>
+      <h1>Skill Assessment</h1>
+      <p class="text-muted">Track your skills vs. market demand</p>
+    </div>
+  </header>
+
+  <form id="new-skill-form" class="new-form">
+    <input type="text" name="skill" placeholder="Skill (e.g. Python)" required />
+    <select name="self_rating">
+      <option value="1">Self: 1</option>
+      <option value="2">Self: 2</option>
+      <option value="3" selected>Self: 3</option>
+      <option value="4">Self: 4</option>
+      <option value="5">Self: 5</option>
+    </select>
+    <input type="text" name="notes" placeholder="Notes" />
+    <button class="btn btn-primary" type="submit">Add / Update</button>
+    <button class="btn btn--ghost btn--sm" type="button" id="skill-cancel-edit" style="display:none">Cancel edit</button>
+  </form>
+  <p class="text-muted">Market demand is computed automatically by the daemon from matching jobs in the database — you only rate yourself.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Skill</th>
+        <th>Self Rating</th>
+        <th>Demand (auto)</th>
+        <th>Matching Jobs</th>
+        <th>Gap</th>
+        <th>Notes</th>
+        <th>Updated</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="skills-tbody"></tbody>
+  </table>
+  <div id="skills-empty" class="empty-state hidden">
+    <div class="empty-icon">🎯</div>
+    <h2>No skills tracked</h2>
+    <p>Add skills to track your proficiency vs. market demand.</p>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/skills.js') }}"></script>
+{% endblock %}

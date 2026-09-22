@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics · Jobhunt{% endblock %}
+
+{% block content %}
+<section class="page">
+  <header class="page-header">
+    <div>
+      <h1>Analytics</h1>
+      <p class="text-muted">Your 30-day job-hunting activity</p>
+    </div>
+  </header>
+
+  <div class="analytics-grid">
+    <div class="stat-card">
+      <div class="stat-label">Total Reviews (30d)</div>
+      <div id="total-reviews" class="stat-value">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Active Days</div>
+      <div id="active-days" class="stat-value">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Avg Reviews / Day</div>
+      <div id="avg-per-day" class="stat-value">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Avg. Relevance Score</div>
+      <div id="avg-score" class="stat-value">—</div>
+    </div>
+  </div>
+
+  <div class="analytics-grid">
+    <div class="stat-card wide">
+      <div class="stat-label">Reviews per Track</div>
+      <ul id="by-track" class="stat-list"></ul>
+    </div>
+    <div class="stat-card wide">
+      <div class="stat-label">Reviews per Source</div>
+      <ul id="by-source" class="stat-list"></ul>
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-label">Daily Reviews</div>
+    <div id="daily-chart" class="daily-chart"></div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-label">Top Liked Companies</div>
+    <ul id="top-liked" class="stat-list"></ul>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/analytics.js') }}"></script>
+{% endblock %}

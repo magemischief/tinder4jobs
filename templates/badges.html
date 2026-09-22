@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Badges · Jobhunt{% endblock %}
+
+{% block content %}
+<section class="page">
+  <header class="page-header">
+    <div>
+      <h1>Badges</h1>
+      <p class="text-muted" id="badges-subtitle">Loading…</p>
+    </div>
+    <div class="badge-summary">
+      <span id="earned-count" class="badge-count earned">0</span>
+      <span class="badge-count-label">earned</span>
+      <span id="locked-count" class="badge-count locked">0</span>
+      <span class="badge-count-label">locked</span>
+    </div>
+  </header>
+
+  <div id="badge-category-tabs" class="badge-tabs">
+    <button class="badge-tab active" data-filter="all">All</button>
+    <button class="badge-tab" data-filter="earned">Earned</button>
+    <button class="badge-tab" data-filter="locked">Locked</button>
+  </div>
+
+    <div id="badge-grid" class="badge-grid">
+    <!-- Skeleton placeholders shown while loading -->
+    <div id="badge-skeleton" class="badge-skeleton-grid">
+      <div class="skeleton-badge"></div>
+      <div class="skeleton-badge"></div>
+      <div class="skeleton-badge"></div>
+      <div class="skeleton-badge"></div>
+      <div class="skeleton-badge"></div>
+      <div class="skeleton-badge"></div>
+      <div class="skeleton-badge"></div>
+      <div class="skeleton-badge"></div>
+    </div>
+  </div>
+
+  <div id="badges-empty" class="empty-state hidden">
+    <div class="empty-icon">🏅</div>
+    <h2>No badges yet</h2>
+    <p>Start reviewing jobs to earn your first badge.</p>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/badges.js') }}"></script>
+{% endblock %}

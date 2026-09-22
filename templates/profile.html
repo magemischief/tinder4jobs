@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Profile · Jobhunt{% endblock %}
+
+{% block content %}
+<section class="page">
+  <header class="page-header">
+    <div>
+      <h1>Profile</h1>
+      <p class="text-muted">Customize your job search and view your achievements.</p>
+    </div>
+  </header>
+
+  <nav class="profile-tabs" role="tablist" aria-label="Profile sections">
+    <button
+      id="tab-preferences"
+      class="profile-tab active"
+      type="button"
+      role="tab"
+      aria-selected="true"
+      aria-controls="section-preferences"
+      data-section="preferences"
+    >Job Search Preferences</button>
+    <button
+      id="tab-badges"
+      class="profile-tab"
+      type="button"
+      role="tab"
+      aria-selected="false"
+      aria-controls="section-badges"
+      data-section="badges"
+    >Badges</button>
+  </nav>
+
+  <section id="section-preferences" class="profile-section" data-section="preferences" role="tabpanel" aria-labelledby="tab-preferences">
+    <div class="profile-section-header">
+      <h2>Job Search Preferences</h2>
+      <button id="save-btn" class="btn" type="button">Save changes</button>
+    </div>
+
+    <div class="prefs-grid">
+      <div class="prefs-card">
+        <h2>Daily Goal</h2>
+        <p class="text-muted">Number of reviews you want to complete each day.</p>
+        <label for="pref-daily-goal">Reviews per day</label>
+        <input id="pref-daily-goal" type="number" min="1" max="100" value="10" />
+      </div>
+
+      <div class="prefs-card prefs-card--wide">
+        <h2>Job Tracks</h2>
+        <p class="text-muted">
+          Define the job titles and keywords you want for each track. Tracks
+          decide which job postings match your search. Press Enter to add
+          titles/keywords while editing a track.
+        </p>
+        <div id="tracks-list" class="regions-list"></div>
+        <button id="add-track-btn" type="button" class="btn btn--ghost">+ Add track</button>
+      </div>
+
+      <div class="prefs-card">
+        <h2>Keywords</h2>
+        <p class="text-muted">Jobs must contain at least one of these words. Press Enter to add.</p>
+        <div class="chip-input" data-target="pref-keywords">
+          <div class="chip-list" id="pref-keywords-chips"></div>
+          <input type="text" id="pref-keywords-input" placeholder="e.g. python" />
+        </div>
+      </div>
+
+      <div class="prefs-card">
+        <h2>Blacklist</h2>
+        <p class="text-muted">Auto-hide jobs that contain any of these terms.</p>
+        <div class="chip-input" data-target="pref-blacklist">
+          <div class="chip-list" id="pref-blacklist-chips"></div>
+          <input type="text" id="pref-blacklist-input" placeholder="e.g. junior, intern" />
+        </div>
+      </div>
+
+      <div class="prefs-card prefs-card--wide">
+        <h2>Regions</h2>
+        <p class="text-muted">
+          Define the regions you want to scrape. Each region has a short code (shown as a colored badge on job cards) and a list of raw location strings to match against incoming job postings. Remote roles match under every region — no need to list them here.
+        </p>
+        <div id="regions-list" class="regions-list"></div>
+        <button id="add-region-btn" type="button" class="btn btn--ghost">+ Add region</button>
+      </div>
+
+      <div class="prefs-card">
+        <h2>Options</h2>
+        <label class="checkbox">
+          <input id="pref-exclude-seen" type="checkbox" />
+          <span>Hide jobs I've already reviewed</span>
+        </label>
+        <label for="pref-energy-max">Daily review limit (energy check)</label>
+        <input id="pref-energy-max" type="number" min="0" max="500" value="50" />
+        <p class="text-muted">Set to 0 to disable the Energy check warning.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="section-badges" class="profile-section hidden" data-section="badges" role="tabpanel" aria-labelledby="tab-badges">
+    <div class="profile-section-header">
+      <h2>Badges</h2>
+    </div>
+    <p class="text-muted" id="badges-subtitle">Your achievements</p>
+
+    <div id="badge-category-tabs" class="badge-tabs">
+      <button class="badge-tab active" data-filter="all">All</button>
+      <button class="badge-tab" data-filter="earned">Earned</button>
+      <button class="badge-tab" data-filter="locked">Locked</button>
+    </div>
+
+    <div id="badge-grid" class="badge-grid"></div>
+
+    <div id="badges-empty" class="empty-state hidden">
+      <div class="empty-icon">🏅</div>
+      <h2>No badges yet</h2>
+      <p>Start reviewing jobs to earn your first badge.</p>
+    </div>
+  </section>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/preferences.js') }}"></script>
+<script src="{{ url_for('static', filename='js/regions.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tracks.js') }}"></script>
+<script src="{{ url_for('static', filename='js/badges.js') }}"></script>
+<script src="{{ url_for('static', filename='js/profile.js') }}"></script>
+{% endblock %}

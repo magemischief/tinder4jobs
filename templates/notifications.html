@@ -7,18 +7,18 @@
   <header class="page-header">
     <div>
       <h1>Notifications</h1>
-      <p class="text-muted">Active communication alerts from jobcheck.py</p>
+      <p class="text-muted">Jobs you've applied to — with employer email replies flagged</p>
     </div>
   </header>
 
   <div id="notification-banner" class="notification-banner hidden" role="alert"></div>
 
-  <div id="notifications-list" class="notification-grid"></div>
+  <div id="notification-panels" class="notification-panels"></div>
 
   <div id="notifications-empty" class="empty-state hidden">
-    <div class="empty-icon">✅</div>
-    <h2>No active alerts</h2>
-    <p>No jobs are currently flagged as awaiting response.</p>
+    <div class="empty-icon">📭</div>
+    <h2>No applications yet</h2>
+    <p>Jobs you apply to will show up here. When an employer email matches an application, it'll be flagged with a link to the email.</p>
   </div>
 </section>
 {% endblock %}

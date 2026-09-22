@@ -7,7 +7,7 @@
   <header class="page-header">
     <div>
       <h1>Application Manager</h1>
-      <p class="text-muted">Jobs marked "Ready to Apply"</p>
+      <p class="text-muted">Jobs marked "Ready to Apply" — <span id="app-count">0</span> total</p>
     </div>
     <input
       id="search-input"
@@ -17,7 +17,33 @@
     />
   </header>
 
-  <div class="table-card">
+  <div class="app-toolbar">
+    <div class="filter-group">
+      <label for="sort-select">Sort</label>
+      <select id="sort-select" class="filter-select">
+        <option value="score">Score (high → low)</option>
+        <option value="deadline">Deadline (soonest)</option>
+        <option value="newest">Newest first</option>
+        <option value="company">Company (A–Z)</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label for="ats-filter">Apply type</label>
+      <select id="ats-filter" class="filter-select">
+        <option value="">All</option>
+        <option value="easy">Easy Apply / Direct</option>
+        <option value="ats">Uses ATS</option>
+        <option value="ai">Uses AI (hiring)</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="top3-strip" class="top3-strip hidden">
+    <h3>🔥 Top 3 to apply today</h3>
+    <div id="top3-list" class="top3-list"></div>
+  </div>
+
+  <div class="table-card table-wrap">
     <table>
       <thead>
         <tr>
@@ -25,12 +51,23 @@
           <th>Company</th>
           <th>Location</th>
           <th>Salary</th>
-          <th>Found</th>
-          <th>Link</th>
+          <th>Deadline</th>
+          <th>Score</th>
+          <th>ATS</th>
           <th>Action</th>
         </tr>
       </thead>
-      <tbody id="applications-tbody"></tbody>
+            <tbody id="applications-tbody">
+        <!-- Skeleton rows shown while loading -->
+        <tr class="skeleton-row-wrapper" id="app-skeleton">
+          <td colspan="8">
+            <div class="skeleton-row"><div class="skeleton-cell"></div><div class="skeleton-cell skeleton-cell--short"></div><div class="skeleton-cell skeleton-cell--short"></div></div>
+            <div class="skeleton-row"><div class="skeleton-cell"></div><div class="skeleton-cell skeleton-cell--short"></div><div class="skeleton-cell skeleton-cell--short"></div></div>
+            <div class="skeleton-row"><div class="skeleton-cell"></div><div class="skeleton-cell skeleton-cell--short"></div><div class="skeleton-cell skeleton-cell--short"></div></div>
+            <div class="skeleton-row"><div class="skeleton-cell"></div><div class="skeleton-cell skeleton-cell--short"></div><div class="skeleton-cell skeleton-cell--short"></div></div>
+          </td>
+        </tr>
+      </tbody>
     </table>
     <div id="applications-empty" class="empty-state hidden">
       <div class="empty-icon">📭</div>
@@ -39,8 +76,85 @@
     </div>
   </div>
 </section>
+
+<!-- Slide-in drawer for job detail -->
+<aside id="detail-drawer" class="drawer hidden" aria-label="Job details">
+  <header class="drawer-header">
+    <h2 id="drawer-title">Job Detail</h2>
+    <button id="drawer-close" class="btn btn--ghost btn--sm" type="button" aria-label="Close">✕</button>
+  </header>
+  <div class="drawer-body">
+    <h3 id="drawer-job-title"></h3>
+    <p id="drawer-company" class="text-muted"></p>
+    <p id="drawer-location" class="text-muted"></p>
+    <p id="drawer-salary" class="text-muted"></p>
+    <p id="drawer-deadline" class="text-muted"></p>
+    <div id="drawer-badges" style="display:flex;gap:6px;margin:8px 0;"></div>
+    <a id="drawer-link" class="link-button" href="#" target="_blank" rel="noopener noreferrer" hidden>Open original posting ↗</a>
+    <div class="drawer-field">
+      <label for="drawer-notes">Notes</label>
+      <textarea id="drawer-notes" rows="3" placeholder="Why interesting, who to contact..."></textarea>
+    </div>
+    <div class="drawer-field">
+      <label for="drawer-deadline-input">Application deadline</label>
+      <input id="drawer-deadline-input" type="date" />
+    </div>
+    <div class="drawer-field">
+      <label for="drawer-track">Track</label>
+      <select id="drawer-track"></select>
+    </div>
+    <div class="drawer-field">
+      <label for="drawer-description">Description</label>
+      <div id="drawer-description" class="drawer-description"></div>
+    </div>
+  </div>
+  <footer class="drawer-footer">
+    <button id="drawer-archive" class="btn btn--ghost btn--sm" type="button">Archive</button>
+    <button id="drawer-apply" class="btn btn-primary" type="button">Mark Applied</button>
+  </footer>
+</aside>
+<div id="drawer-overlay" class="drawer-overlay hidden"></div>
+
+<!-- Mark-Applied modal -->
+<div id="apply-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="apply-modal-title">
+  <div class="modal-card">
+    <header class="modal-header">
+      <h2 id="apply-modal-title">Mark as Applied</h2>
+      <button id="apply-cancel" class="btn btn--ghost btn--sm" type="button" aria-label="Close">✕</button>
+    </header>
+    <div class="modal-body">
+      <p id="apply-job-title" class="text-muted" style="margin-top:0;font-weight:600;"></p>
+      <label for="apply-resume">Resume used</label>
+      <input id="apply-resume" type="text" placeholder="e.g. Resume-v3.pdf" />
+      <label for="apply-cover">Cover letter</label>
+      <select id="apply-cover">
+        <option value="">None</option>
+      </select>
+      <label for="apply-date">Date applied</label>
+      <input id="apply-date" type="date" />
+      <label for="apply-notes">Notes</label>
+      <textarea id="apply-notes" rows="2" placeholder="Referred by, portal link, etc."></textarea>
+    </div>
+    <footer class="modal-footer">
+      <button id="apply-skip" class="btn btn--ghost" type="button">Skip</button>
+      <button id="apply-confirm" class="btn btn-primary" type="button">Save</button>
+    </footer>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/application.js') }}"></script>
+<script>
+  (function () {
+    function boot() {
+      try { loadApplications(); } catch (err) { console.error(err); }
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', boot, { once: true });
+    } else {
+      boot();
+    }
+  })();
+</script>
 {% endblock %}

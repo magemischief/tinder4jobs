@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Preferences · Jobhunt{% endblock %}
+
+{% block content %}
+<section class="page">
+  <header class="page-header">
+    <div>
+      <h1>Job Search Preferences</h1>
+      <p class="text-muted">Customize your review queue, daily goal, and filters.</p>
+    </div>
+    <button id="save-btn" class="btn" type="button">Save changes</button>
+  </header>
+
+  <div class="prefs-grid">
+    <div class="prefs-card">
+      <h2>Daily Goal</h2>
+      <p class="text-muted">Number of reviews you want to complete each day.</p>
+      <label for="pref-daily-goal">Reviews per day</label>
+      <input id="pref-daily-goal" type="number" min="1" max="100" value="10" />
+    </div>
+
+    <div class="prefs-card">
+      <h2>Job Tracks</h2>
+      <p class="text-muted">Job categories to focus on. Press Enter to add.</p>
+      <div class="chip-input" data-target="pref-tracks">
+        <div class="chip-list" id="pref-tracks-chips"></div>
+        <input type="text" id="pref-tracks-input" placeholder="e.g. Software Engineer" />
+      </div>
+    </div>
+
+    <div class="prefs-card">
+      <h2>Keywords</h2>
+      <p class="text-muted">Jobs must contain at least one of these words. Press Enter to add.</p>
+      <div class="chip-input" data-target="pref-keywords">
+        <div class="chip-list" id="pref-keywords-chips"></div>
+        <input type="text" id="pref-keywords-input" placeholder="e.g. python" />
+      </div>
+    </div>
+
+    <div class="prefs-card">
+      <h2>Blacklist</h2>
+      <p class="text-muted">Auto-hide jobs that contain any of these terms.</p>
+      <div class="chip-input" data-target="pref-blacklist">
+        <div class="chip-list" id="pref-blacklist-chips"></div>
+        <input type="text" id="pref-blacklist-input" placeholder="e.g. junior, intern" />
+      </div>
+    </div>
+
+    <div class="prefs-card prefs-card--wide">
+      <h2>Regions</h2>
+      <p class="text-muted">
+        Define the regions you want to scrape. Each region has a short code (shown as a colored badge on job cards) and a list of raw location strings to match against incoming job postings. Remote roles match under every region — no need to list them here.
+      </p>
+      <div id="regions-list" class="regions-list"></div>
+      <button id="add-region-btn" type="button" class="btn btn--ghost">+ Add region</button>
+    </div>
+
+    <div class="prefs-card">
+      <h2>Options</h2>
+      <label class="checkbox">
+        <input id="pref-exclude-seen" type="checkbox" />
+        <span>Hide jobs I've already reviewed</span>
+      </label>
+      <label for="pref-energy-max">Daily review limit (energy check)</label>
+      <input id="pref-energy-max" type="number" min="0" max="500" value="50" />
+      <p class="text-muted">Set to 0 to disable the Energy check warning.</p>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/preferences.js') }}"></script>
+<script src="{{ url_for('static', filename='js/regions.js') }}"></script>
+{% endblock %}

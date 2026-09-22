@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign in · Jobhunt</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
+</head>
+<body class="login-body">
+  <div class="login-card">
+    <div class="login-brand">Jobhunt</div>
+    <h1 class="login-title">Sign in</h1>
+    <p class="login-sub">Enter your username to continue.</p>
+
+    <form id="login-form" class="login-form" autocomplete="off">
+      <label for="username">Username</label>
+      <input
+        type="text"
+        id="username"
+        name="username"
+        required
+        autofocus
+        maxlength="50"
+        placeholder="e.g. Gabby"
+      />
+      <button type="submit" class="btn login-submit">Sign in</button>
+      <p id="login-error" class="login-error" role="alert"></p>
+    </form>
+
+    <p class="login-hint">
+      First time here? Your account is created automatically when you sign in.
+    </p>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+  <script>
+    (function () {
+      const form = document.getElementById('login-form');
+      const input = document.getElementById('username');
+      const err = document.getElementById('login-error');
+      const next = {{ next | tojson }};
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        err.textContent = '';
+        const username = (input.value || '').trim();
+        if (!username) {
+          err.textContent = 'Please enter a username';
+          return;
+        }
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username }),
+            credentials: 'same-origin'
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            err.textContent = data.error || `Sign in failed (${res.status})`;
+            return;
+          }
+          window.location.href = next || '/review';
+        } catch (e2) {
+          err.textContent = 'Network error: ' + e2.message;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

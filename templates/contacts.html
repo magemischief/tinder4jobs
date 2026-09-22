@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Contacts · Jobhunt{% endblock %}
+
+{% block content %}
+<section class="page data-page">
+  <header class="page-header">
+    <div>
+      <h1>Contacts</h1>
+      <p class="text-muted">Recruiters, hiring managers, referrals</p>
+    </div>
+  </header>
+
+  <form id="new-contact-form" class="new-form">
+    <input type="text" name="name" placeholder="Name" required />
+    <input type="text" name="company" placeholder="Company" />
+    <input type="text" name="role" placeholder="Role" />
+    <input type="email" name="email" placeholder="Email" />
+    <input type="text" name="linkedin" placeholder="LinkedIn URL" />
+    <select name="warmth">
+      <option value="1">Cold (1)</option>
+      <option value="2">Warm (2)</option>
+      <option value="3">Hot (3)</option>
+    </select>
+    <input type="text" name="notes" placeholder="Notes" />
+    <button class="btn btn-primary" type="submit">Add contact</button>
+    <button class="btn btn--ghost btn--sm" type="button" id="contact-cancel-edit" style="display:none">Cancel edit</button>
+  </form>
+
+  <input id="contacts-search" type="search" placeholder="Search contacts…" aria-label="Search contacts" />
+
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Company</th>
+        <th>Role</th>
+        <th>Email</th>
+        <th>LinkedIn</th>
+        <th>Warmth</th>
+        <th>Notes</th>
+        <th>Updated</th>
+      </tr>
+    </thead>
+    <tbody id="contacts-tbody"></tbody>
+  </table>
+  <div id="contacts-empty" class="empty-state hidden">
+    <div class="empty-icon">👥</div>
+    <h2>No contacts yet</h2>
+    <p>Add recruiters and referrals to keep track of your network.</p>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/contacts.js') }}"></script>
+{% endblock %}

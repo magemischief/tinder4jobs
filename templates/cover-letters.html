@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Cover Letters · Jobhunt{% endblock %}
+
+{% block content %}
+<section class="page data-page">
+  <header class="page-header">
+    <div>
+      <h1>Cover Letters</h1>
+      <p class="text-muted">Templates you can tailor per application</p>
+    </div>
+  </header>
+
+  <form id="new-letter-form" class="new-form">
+    <input type="text" name="title" placeholder="Title (e.g. Software Engineer — short)" required />
+    <textarea name="body" placeholder="Cover letter body — use {{company}} and {{role}} as placeholders." rows="6" required></textarea>
+    <button class="btn btn-primary" type="submit">Save template</button>
+  </form>
+
+  <div id="letters-list" class="card-grid"></div>
+
+  <div id="letters-empty" class="empty-state hidden">
+    <div class="empty-icon">📝</div>
+    <h2>No cover letter templates yet</h2>
+    <p>Save reusable templates — use {{company}} and {{role}} as placeholders when applying.</p>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/cover-letters.js') }}"></script>
+{% endblock %}

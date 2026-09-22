@@ -4,59 +4,128 @@
 
 {% block content %}
 <section class="page swipe-page">
-  <header class="page-header">
-    <div>
-      <h1>Swipe Review</h1>
-      <p class="text-muted">Review new postings from Jobhunt.py</p>
+  <!-- Filter bar — single horizontal row under the header -->
+  <div class="swipe-filters swipe-filters--sticky" role="toolbar" aria-label="Review filters">
+    <div class="filter-bar">
+      <span class="filter-label">Filter</span>
+      <select id="location-filter" class="filter-select" aria-label="Location filter"></select>
+      <select id="job-type-filter" class="filter-select" aria-label="Job type filter"></select>
+      <select id="score-filter" class="filter-select" aria-label="Score filter"></select>
+      <select id="ats-filter" class="filter-select" aria-label="ATS filter"></select>
+      <span class="queue-count" id="queue-count" aria-live="polite">0 in queue</span>
+      <button id="tracks-edit-btn" class="icon-btn icon-btn--small" type="button" aria-label="Edit tracks for this job" title="Edit tracks (T)">
+        <i class="icon icon-tracks"></i>
+      </button>
     </div>
-    <div class="queue-count">
-      <span id="queue-count">0</span> remaining
+  </div>
+
+  <header class="swipe-header">
+    <div>
+      <h1 class="swipe-title">Swipe Review</h1>
+      <p class="text-muted">
+        Score each job, pick what fits — your best matches get <span class="text-emphasis">Ready to Apply</span> in the App Manager.
+      </p>
+    </div>
+    <div class="swipe-actions--header">
+      <button id="add-job-btn" class="icon-btn" type="button" aria-label="Add job manually" title="Add job">+</button>
+      <button id="sidebar-toggle" class="icon-btn" type="button" data-action="toggle-sidebar" aria-label="Toggle panel (Ctrl+B)" title="Toggle panel">
+        <i class="icon icon-panel"></i>
+      </button>
     </div>
   </header>
-  <div class="filter-bar">
-    <div class="filter-group">
-      <label for="location-filter">Location</label>
-      <select id="location-filter" class="filter-select">
-        <option value="">All locations</option>
-      </select>
-    </div>
-    <div class="filter-group">
-      <label for="job-type-filter">Job type</label>
-      <select id="job-type-filter" class="filter-select">
-        <option value="">All job types</option>
-      </select>
-    </div>
-    <button id="clear-filters" class="btn btn-secondary" type="button">Clear filters</button>
-  </div>
 
-  <div class="queue-progress">
-    <div id="queue-progress-bar" class="queue-progress-bar"></div>
-
-  <div class="swipe-stage">
-    <div id="card-container" class="card-container" aria-live="polite"></div>
-    <div id="empty-state" class="empty-state hidden">
-      <div class="empty-icon">✓</div>
-      <h2>Queue cleared</h2>
-      <p>There are no more jobs waiting in the review queue.</p>
-      <button id="refresh-queue" class="btn btn-secondary">Reload queue</button>
+  <!-- Swipe stamps for visual feedback -->
+  <div class="swipe-stamps">
+    <div class="swipe-stamp swipe-stamp--like">
+      <span class="stamp-icon">♥</span>
+      <span class="stamp-text">LIKE</span>
+    </div>
+    <div class="swipe-stamp swipe-stamp--dislike">
+      <span class="stamp-icon">✕</span>
+      <span class="stamp-text">NOPE</span>
+    </div>
+    <div class="swipe-stamp swipe-stamp--unsure">
+      <span class="stamp-icon">?</span>
+      <span class="stamp-text">UNSURE</span>
+    </div>
+    <div class="swipe-stamp swipe-stamp--superdislike">
+      <span class="stamp-icon">★</span>
+      <span class="stamp-text">NO FIT</span>
     </div>
   </div>
 
-  <div id="actions" class="actions" hidden>
-    <button id="dislike-btn" class="action-btn danger" type="button" aria-label="Dislike job">
-      <span class="action-icon">✕</span>
-      <span>Dislike</span>
-    </button>
-    <button id="unsure-btn" class="action-btn neutral" type="button" aria-label="Unsure about job">
-      <span class="action-icon">?</span>
-      <span>Unsure</span>
-    </button>
-    <button id="like-btn" class="action-btn primary" type="button" aria-label="Like job">
-      <span class="action-icon">♥</span>
-      <span>Like</span>
-    </button>
+  <div class="swipe-container">
+    <div id="card-container" class="card-container" aria-live="polite">
+      <!-- Skeleton card shown while queue loads -->
+      <div id="card-skeleton" class="skeleton-card">
+        <div class="skeleton-card-header">
+          <div class="skeleton-badge"></div>
+          <div class="skeleton-text" style="width:70%; margin-bottom:8px;"></div>
+          <div class="skeleton-text" style="width:50%;"></div>
+        </div>
+        <div class="skeleton-card-body">
+          <div class="skeleton-text" style="width:100%; margin-bottom:6px;"></div>
+          <div class="skeleton-text" style="width:90%; margin-bottom:6px;"></div>
+          <div class="skeleton-text" style="width:75%; margin-bottom:6px;"></div>
+          <div class="skeleton-text" style="width:85%; margin-bottom:6px;"></div>
+          <div class="skeleton-text" style="width:60%;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action row: superdislike, dislike, unsure, like (left to right severity) -->
+    <div class="swipe-actions">
+      <button id="superdislike-btn" class="action-btn action-btn--superdislike" type="button" aria-label="Not a fit" title="Not a fit (S)">
+        <span class="action-glyph" aria-hidden="true">★</span>
+        <span class="action-label">No fit</span>
+      </button>
+      <button id="dislike-btn" class="action-btn action-btn--dislike" type="button" aria-label="Dislike job" title="Dislike (← or D)">
+        <span class="action-glyph" aria-hidden="true">✕</span>
+        <span class="action-label">Dislike</span>
+      </button>
+      <button id="unsure-btn" class="action-btn action-btn--unsure" type="button" aria-label="Unsure / Skip" title="Unsure (↑ or U)">
+        <span class="action-glyph" aria-hidden="true">?</span>
+        <span class="action-label">Unsure</span>
+      </button>
+      <button id="like-btn" class="action-btn action-btn--like" type="button" aria-label="Like job" title="Like (→ or L)">
+        <span class="action-glyph" aria-hidden="true">♥</span>
+        <span class="action-label">Like</span>
+      </button>
+      <button id="undo-btn" class="action-btn action-btn--undo" type="button" aria-label="Undo last swipe" title="Undo (Ctrl+Z / Cmd+Z)">
+        <span class="action-glyph" aria-hidden="true">↶</span>
+        <span class="action-label">Undo</span>
+      </button>
+      <button id="help-btn" class="action-btn action-btn--help" type="button" aria-label="Help / Shortcuts" title="Help (?)">
+        <span class="action-glyph" aria-hidden="true">?</span>
+        <span class="action-label">Help</span>
+      </button>
+    </div>
   </div>
 </section>
+
+<!-- Add Job Modal -->
+<div id="add-job-modal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Add Job Manually</h2>
+      <button id="add-job-cancel" class="btn btn--ghost" type="button">Cancel</button>
+    </div>
+    <div class="modal-body">
+      <label for="add-job-title">Title</label>
+      <input id="add-job-title" type="text" placeholder="Job title" required />
+      <label for="add-job-company">Company</label>
+      <input id="add-job-company" type="text" placeholder="Company name" required />
+      <label for="add-job-link">Application Link</label>
+      <input id="add-job-link" type="url" placeholder="https://example.com/apply" />
+      <label for="add-job-location">Location</label>
+      <input id="add-job-location" type="text" placeholder="e.g. New York, Remote, London" />
+    </div>
+    <footer class="modal-footer">
+      <button id="add-job-submit" class="btn btn-primary" type="button">Add Job</button>
+    </footer>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
