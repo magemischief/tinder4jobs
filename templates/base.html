@@ -12,7 +12,9 @@
   <div class="topbar" id="topbar">
     <div class="topbar-left">
       <span class="topbar-logo">Jobhunt</span>
-      <span class="topbar-version">Design System v3 — top bar</span>
+      <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Open navigation panel" aria-controls="sidebar" aria-expanded="false">
+        <span aria-hidden="true">☰</span>
+      </button>
     </div>
     <div class="topbar-center">
       <div class="topbar-quick-stats">
@@ -34,19 +36,19 @@
       <button id="topbar-theme-toggle" class="topbar-btn" type="button" aria-label="Toggle theme">
         <span aria-hidden="true">🌓</span>
       </button>
-      <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Toggle sidebar">
-        <span aria-hidden="true">☰</span>
-      </button>
     </div>
   </div>
 
   <!-- Existing sidebar -->
   <nav class="sidebar" id="sidebar" aria-label="Main navigation">
-    <div class="brand">Jobhunt</div>
+    <div class="sidebar-panel-header">
+      <div class="brand">Jobhunt</div>
+      <button id="sidebar-close" class="sidebar-close" type="button" aria-label="Close navigation panel" title="Close navigation">×</button>
+    </div>
 
     <div class="nav-group">
       <a href="{{ url_for('swipe_page') }}" {% if active_page == 'swipe' %}class="active"{% endif %}>
-        <span class="nav-icon" aria-hidden="true">🔄</span> Swipe Review
+        <span class="nav-icon" aria-hidden="true">🔄</span> Jobs
       </a>
       <a href="{{ url_for('applications_page') }}" {% if active_page == 'applications' %}class="active"{% endif %}>
         <span class="nav-icon" aria-hidden="true">📋</span> Applications <span id="apps-count" class="nav-badge" aria-label="ready to apply"></span>
@@ -94,13 +96,11 @@
     </div>
   </nav>
 
-  <main class="content" id="main-content">
+  <main class="content{% if active_page == 'swipe' %} content--swipe{% endif %}" id="main-content">
     {% block content %}{% endblock %}
   </main>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-
-  <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle dark/light theme">🌓</button>
 
   <script src="{{ url_for('static', filename='js/common.js') }}"></script>
   <script src="{{ url_for('static', filename='js/auth.js') }}"></script>

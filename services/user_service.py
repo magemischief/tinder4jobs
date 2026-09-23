@@ -13,6 +13,8 @@ from shared_schema import count_skill_job_matches, demand_score_for_count
 DEFAULT_USER_ID = 1
 SESSION_COOKIE_NAME = "jh_session"
 SESSION_TTL_SECONDS = 60 * 60 * 24 * 30
+REVIEW_STATUS = "Review to Apply"
+READY_STATUS = "Ready to Apply"
 
 def _make_token():
     return secrets.token_hex(24)
@@ -1183,10 +1185,19 @@ def get_analytics_summary(user_id):
             (user_id, thirty_days_ago),
         ).fetchall()
         by_track = conn.execute(
-            "SELECT j.track, COUNT(*) as total FROM user_session_stats s "
+            "SELECT j.track, COUNT(*) as total, "
+            "SUM(CASE WHEN s.action_type = 'like' THEN 1 ELSE 0 END) as liked, "
+            "SUM(CASE WHEN s.action_type = 'apply' THEN 1 ELSE 0 END) as applied, "
+            "AVG(CASE WHEN s.job_score > 0 THEN s.job_score END) as avg_score "
+            "FROM user_session_stats s "
             "JOIN jobs j ON j.id = s.job_id "
             f"WHERE s.user_id = ? AND s.action_type IN ({COUNTED_ACTIONS_SQL}) AND date(s.created_at) >= ? "
             "GROUP BY j.track ORDER BY total DESC",
+            (user_id, thirty_days_ago),
+        ).fetchall()
+        actions = conn.execute(
+            "SELECT action_type, COUNT(*) as total FROM user_session_stats "
+            "WHERE user_id = ? AND date(created_at) >= ? GROUP BY action_type",
             (user_id, thirty_days_ago),
         ).fetchall()
         by_source = conn.execute(
@@ -1208,11 +1219,31 @@ def get_analytics_summary(user_id):
             "WHERE user_id = ? AND job_score IS NOT NULL AND job_score > 0",
             (user_id,),
         ).fetchone()[0] or 0
+        action_counts = {row["action_type"]: row["total"] for row in actions}
+        reviewed = sum(action_counts.get(action, 0) for action in ("like", "dislike", "unsure", "duplicate"))
+        liked = action_counts.get("like", 0)
+        applied = action_counts.get("apply", 0)
+        ready_to_apply = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE status = ?",
+            (READY_STATUS,),
+        ).fetchone()[0]
+        queue_count = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE status = ?",
+            (REVIEW_STATUS,),
+        ).fetchone()[0]
         return {
             "daily_reviews": [dict(r) for r in daily],
             "by_track": [dict(r) for r in by_track],
             "by_source": [dict(r) for r in by_source],
             "top_liked_companies": [dict(r) for r in top_liked],
+            "actions": action_counts,
+            "pipeline": {
+                "reviewed": reviewed,
+                "liked": liked,
+                "applied": applied,
+                "ready_to_apply": ready_to_apply,
+                "queue_count": queue_count,
+            },
             # job_score is stored on the 0-100 badge scale; expose it on the
             # same 1-10 scale as jobs.relevance_score (frontend renders "/10").
             "avg_relevance_score": round(float(avg_score) / 10, 1),

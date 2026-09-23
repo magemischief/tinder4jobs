@@ -1,38 +1,36 @@
 {% extends "base.html" %}
 
-{% block title %}Swipe Review · Jobhunt{% endblock %}
+{% block title %}Jobs · Jobhunt{% endblock %}
 
 {% block content %}
 <section class="page swipe-page">
-  <!-- Filter bar — single horizontal row under the header -->
-  <div class="swipe-filters swipe-filters--sticky" role="toolbar" aria-label="Review filters">
-    <div class="filter-bar">
-      <span class="filter-label">Filter</span>
-      <select id="location-filter" class="filter-select" aria-label="Location filter"></select>
-      <select id="job-type-filter" class="filter-select" aria-label="Job type filter"></select>
-      <select id="score-filter" class="filter-select" aria-label="Score filter"></select>
-      <select id="ats-filter" class="filter-select" aria-label="ATS filter"></select>
-      <span class="queue-count" id="queue-count" aria-live="polite">0 in queue</span>
-      <button id="tracks-edit-btn" class="icon-btn icon-btn--small" type="button" aria-label="Edit tracks for this job" title="Edit tracks (T)">
-        <i class="icon icon-tracks"></i>
-      </button>
-    </div>
+  <div class="mobile-swipe-toolbar" aria-label="Review controls">
+    <button id="mobile-filter-toggle" class="mobile-filter-toggle" type="button" aria-controls="swipe-filters" aria-expanded="false">
+      <span aria-hidden="true">⚙</span> Filters <span id="mobile-queue-count" class="mobile-queue-count">0</span>
+    </button>
+    <button id="mobile-add-job-btn" class="mobile-add-job-btn" type="button"><span aria-hidden="true">+</span> Add job</button>
   </div>
-
-  <header class="swipe-header">
-    <div>
-      <h1 class="swipe-title">Swipe Review</h1>
-      <p class="text-muted">
-        Score each job, pick what fits — your best matches get <span class="text-emphasis">Ready to Apply</span> in the App Manager.
-      </p>
-    </div>
-    <div class="swipe-actions--header">
-      <button id="add-job-btn" class="icon-btn" type="button" aria-label="Add job manually" title="Add job">+</button>
-      <button id="sidebar-toggle" class="icon-btn" type="button" data-action="toggle-sidebar" aria-label="Toggle panel (Ctrl+B)" title="Toggle panel">
-        <i class="icon icon-panel"></i>
-      </button>
-    </div>
-  </header>
+  <!-- Filter bar — single horizontal row under the header -->
+  <div id="swipe-filters" class="swipe-filters swipe-filters--sticky" role="toolbar" aria-label="Review filters">
+    <span class="filter-label">Filter</span>
+    <select id="location-filter" class="filter-select" aria-label="Location filter"></select>
+    <select id="job-type-filter" class="filter-select" aria-label="Job type filter"></select>
+    <select id="score-filter" class="filter-select" aria-label="Score filter">
+      <option value="">All scores</option>
+      <option value="high">High score (7–10)</option>
+      <option value="medium">Medium score (4–6)</option>
+      <option value="low">Low score (1–3)</option>
+      <option value="unscored">Unscored</option>
+    </select>
+    <select id="ats-filter" class="filter-select" aria-label="Apply type filter">
+      <option value="">All apply types</option>
+      <option value="easy">Easy apply</option>
+      <option value="ats">Uses ATS</option>
+      <option value="ai">AI hiring</option>
+    </select>
+    <span class="queue-count" id="queue-count" aria-live="polite">0 in queue</span>
+    <button id="add-job-btn" class="add-job-btn" type="button"><span aria-hidden="true">+</span> Add job</button>
+  </div>
 
   <!-- Swipe stamps for visual feedback -->
   <div class="swipe-stamps">
@@ -94,10 +92,6 @@
       <button id="undo-btn" class="action-btn action-btn--undo" type="button" aria-label="Undo last swipe" title="Undo (Ctrl+Z / Cmd+Z)">
         <span class="action-glyph" aria-hidden="true">↶</span>
         <span class="action-label">Undo</span>
-      </button>
-      <button id="help-btn" class="action-btn action-btn--help" type="button" aria-label="Help / Shortcuts" title="Help (?)">
-        <span class="action-glyph" aria-hidden="true">?</span>
-        <span class="action-label">Help</span>
       </button>
     </div>
   </div>

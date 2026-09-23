@@ -3,53 +3,50 @@
 {% block title %}Analytics · Jobhunt{% endblock %}
 
 {% block content %}
-<section class="page">
-  <header class="page-header">
+<section class="page analytics-page">
+  <header class="analytics-hero">
     <div>
-      <h1>Analytics</h1>
-      <p class="text-muted">Your 30-day job-hunting activity</p>
+      <p class="analytics-eyebrow">SEARCH PULSE</p>
+      <h1>Make your next move count.</h1>
+      <p class="text-muted">See what is converting, where your attention is needed, and which tracks are worth pursuing.</p>
     </div>
+    <a class="analytics-cta" href="{{ url_for('swipe_page') }}">Review jobs <span aria-hidden="true">→</span></a>
   </header>
 
-  <div class="analytics-grid">
-    <div class="stat-card">
-      <div class="stat-label">Total Reviews (30d)</div>
-      <div id="total-reviews" class="stat-value">—</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Active Days</div>
-      <div id="active-days" class="stat-value">—</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Avg Reviews / Day</div>
-      <div id="avg-per-day" class="stat-value">—</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Avg. Relevance Score</div>
-      <div id="avg-score" class="stat-value">—</div>
-    </div>
-  </div>
+  <section class="analytics-kpis" aria-label="30-day summary">
+    <article class="analytics-kpi"><span class="analytics-kpi-label">Reviewed</span><strong id="total-reviews" class="analytics-kpi-value">—</strong><span class="analytics-kpi-note">Last 30 days</span></article>
+    <article class="analytics-kpi analytics-kpi--liked"><span class="analytics-kpi-label">Like rate</span><strong id="like-rate" class="analytics-kpi-value">—</strong><span id="liked-count" class="analytics-kpi-note">— kept</span></article>
+    <article class="analytics-kpi analytics-kpi--applied"><span class="analytics-kpi-label">Applications</span><strong id="applied-count" class="analytics-kpi-value">—</strong><span id="apply-rate" class="analytics-kpi-note">— of liked jobs</span></article>
+    <article class="analytics-kpi"><span class="analytics-kpi-label">Average match</span><strong id="avg-score" class="analytics-kpi-value">—</strong><span class="analytics-kpi-note">Quality of reviewed jobs</span></article>
+  </section>
 
-  <div class="analytics-grid">
-    <div class="stat-card wide">
-      <div class="stat-label">Reviews per Track</div>
-      <ul id="by-track" class="stat-list"></ul>
-    </div>
-    <div class="stat-card wide">
-      <div class="stat-label">Reviews per Source</div>
-      <ul id="by-source" class="stat-list"></ul>
-    </div>
-  </div>
+  <section class="analytics-layout">
+    <article class="analytics-panel analytics-panel--next">
+      <div class="analytics-panel-heading"><div><p class="analytics-eyebrow">NEXT BEST MOVE</p><h2 id="next-action-title">Loading your priorities…</h2></div><span id="next-action-icon" class="next-action-icon" aria-hidden="true">→</span></div>
+      <p id="next-action-copy" class="text-muted"></p>
+      <a id="next-action-link" class="analytics-link" href="{{ url_for('swipe_page') }}">Open jobs <span aria-hidden="true">→</span></a>
+    </article>
 
-  <div class="stat-card">
-    <div class="stat-label">Daily Reviews</div>
-    <div id="daily-chart" class="daily-chart"></div>
-  </div>
+    <article class="analytics-panel analytics-panel--pipeline">
+      <div class="analytics-panel-heading"><div><p class="analytics-eyebrow">PIPELINE</p><h2>From review to application</h2></div><span id="queue-count-insight" class="analytics-queue">— in queue</span></div>
+      <div class="pipeline-steps" aria-label="Job search pipeline">
+        <div class="pipeline-step"><strong id="pipeline-reviewed">—</strong><span>Reviewed</span></div><div class="pipeline-connector" aria-hidden="true"></div>
+        <div class="pipeline-step pipeline-step--liked"><strong id="pipeline-liked">—</strong><span>Kept</span></div><div class="pipeline-connector" aria-hidden="true"></div>
+        <div class="pipeline-step pipeline-step--applied"><strong id="pipeline-applied">—</strong><span>Applied</span></div>
+      </div>
+    </article>
+  </section>
 
-  <div class="stat-card">
-    <div class="stat-label">Top Liked Companies</div>
-    <ul id="top-liked" class="stat-list"></ul>
-  </div>
+  <section class="analytics-layout analytics-layout--detail">
+    <article class="analytics-panel analytics-panel--wide">
+      <div class="analytics-panel-heading"><div><p class="analytics-eyebrow">MOMENTUM</p><h2>Review rhythm</h2></div><span id="active-days" class="analytics-substat">— active days</span></div>
+      <div id="daily-chart" class="daily-chart" aria-label="Daily review activity"></div>
+      <p class="analytics-chart-caption"><span id="avg-per-day">—</span> reviews per active day</p>
+    </article>
+
+    <article class="analytics-panel"><div class="analytics-panel-heading"><div><p class="analytics-eyebrow">TRACK PERFORMANCE</p><h2>What you respond to</h2></div></div><ul id="by-track" class="analytics-breakdown"></ul></article>
+    <article class="analytics-panel"><div class="analytics-panel-heading"><div><p class="analytics-eyebrow">SAVED COMPANIES</p><h2>Worth a closer look</h2></div></div><ul id="top-liked" class="analytics-breakdown"></ul></article>
+  </section>
 </section>
 {% endblock %}
 
