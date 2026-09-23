@@ -193,12 +193,61 @@ store, zero flusher errors since restart.
 - Still untracked by policy: `tests/*` is gitignored in both repos, so the
   payload's `test_regressions.py`, `test_database_config.py` and
   `test_safety_regressions.py` sit on disk untracked.
-- Services were NOT restarted. The running web app re-reads templates/static but
-  keeps the old Python modules in memory; the daemon keeps its loaded modules
-  until restarted. Changes take effect on the next restart.
+- Services were NOT restarted *at sync time* — superseded by the cutover entry
+  below. The running web app re-reads templates/static but keeps the old Python
+  modules in memory; the daemon keeps its loaded modules until restarted.
 - Test status at sync time: daemon suite 14/14 pass; web suite 46 tests with 4
   failures — 2 pre-existing on pre-sync code (streak/XP assertions) and 2 inside
   the payload itself (`tickets [0,1,0,1]`, `freeze 1≠2`). Since this sync is a
   pure file copy, they are not sync-induced; root-causing those two against the
   new badge/ticket code is the open follow-up.
+
+
+## 2026-09-22 22:34 — Cutover: the fixes above are LIVE
+
+No file was edited for this step; the running processes were replaced with the
+already-committed source from the two commits above.
+
+- Web (`job-hunt` @ `0049bf7`): `systemctl --user restart job-hunt-web.service`
+  → `restart_exit=0`, new MainPID `1893729` started `22:33:58`, `NRestarts=0`,
+  port 5000 bound by the new PID, `SubState=running`. `logs/webapp.log` shows a
+  clean start (debug off, `0.0.0.0:5000`); the LAN browser that polls
+  `/_livereload/check` reconnected on the next tick, so clients reload the new
+  assets by themselves.
+- Daemon (`jobhunt-daemon` @ `c6d55ed`): already live with NO manual restart.
+  `job-hunt-watchdog.service` watches the daemon source dirs and restarted it
+  once per synced module (`watchdog.log` 21:44:02 → 21:45:53), so PID `1818462`
+  started `21:45:53` — after the `21:43:42` writes. It logged Cycle 1, then
+  `Sleeping 780 min`, with no traceback, and `jobs_tool.py status` answers
+  (5140 jobs, last email `21:43:47`, last fetch `16:31`, last scrape `18:01`).
+- Proof the web swap is real (behaviour, not just timestamps): the old process
+  rendered `const next = "//evil.com";` for `/login?next=//evil.com` — a live
+  open redirect. After the restart the same request renders `const next = "";`,
+  while `/login?next=/settings` still renders `const next = "/settings";`, so
+  the guard blocks the bad case without a false positive. Machine-checkable
+  companion: `__pycache__/app.cpython-314.pyc` was rebuilt at `22:30:01` from
+  the `21:43:42` sources, and the serving PID started later than both.
+- Database untouched: 5140 jobs / 11 users / 566 `user_session_stats` rows and
+  the same 1,291,264,000-byte file with mtime `21:45:55` before and after the
+  restart. `app.py` skips `init_db()` (only ensures `_sessions`) and then runs
+  the additive-column pass, which was a no-op: every column it lists already
+  exists in the live `jobs` table.
+- Watchdog is not a crash loop. Every entry is a deliberate
+  `systemctl --user restart job-hunt-daemon` after a detected change, with a 10 s
+  cooldown. It does not watch this repo, so web-side edits never bounce anything.
+- Testing caveat found while verifying: `tests/test_safety_regressions.py` logs
+  into the LIVE file/DB when run from a shell (it wrote `Ollama is not
+  installed`, `Error inserting job 'Cartographer'` / `database is locked` into
+  `logs/jobs_tool.log` at 22:19). Ollama is installed and on the daemon's PATH
+  (`/usr/local/bin/ollama`, v0.33.1, server 200); those lines are the test
+  process's restricted PATH and its insert bouncing off the running daemon's
+  lock, not daemon faults.
+
+How to verify: `systemctl --user is-active job-hunt-web job-hunt-daemon
+job-hunt-watchdog` → `active` (×3);
+`curl -s 'http://127.0.0.1:5000/login?next=//evil.com' | grep -c evil.com` → `0`;
+`curl -s 'http://127.0.0.1:5000/login?next=/settings' | grep -c /settings` → `1`;
+`tail logs/webapp.log` has no traceback; web PID start time is newer than
+`stat -c %y app.py`.
+
 
