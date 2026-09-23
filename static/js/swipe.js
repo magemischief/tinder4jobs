@@ -495,18 +495,23 @@ async function undoLast() {
   updateUndoButtonState();
   try {
     state.busy = true;
-    const res = await fetch(`/api/jobs/${entry.job.id}/revert`, { method: 'POST' });
-    if (!res.ok) throw new Error('Revert failed');
+    const res = await fetch(`/api/jobs/${entry.job.id}/revert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: entry.action }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Revert failed');
     state.queue.unshift(entry.job);
     renderCard();
     showToast(`Undid ${entry.action} — ${entry.job.title}`, 'success');
   } catch (err) {
     state.history.push(entry); // re-push on failure
-    updateUndoButtonState();
     showToast(err.message, 'error');
   } finally {
     state.busy = false;
     updateSwipeActionState();
+    updateUndoButtonState();
   }
 }
 
@@ -1084,26 +1089,6 @@ function pushHistory(job, action) {
   if (!job) return;
   state.history.push({ job, action, t: Date.now() });
   if (state.history.length > state.historyLimit) state.history.shift();
-}
-
-async function undoLast() {
-  if (state.busy || !state.history.length) return;
-  const entry = state.history.pop();
-  try {
-    state.busy = true;
-    const res = await fetch(`/api/jobs/${entry.job.id}/revert`, { method: 'POST' });
-    if (!res.ok) throw new Error('Revert failed');
-    state.queue.unshift(entry.job);
-    renderCard();
-    showToast(`Undid ${entry.action} — ${entry.job.title}`, 'success');
-  } catch (err) {
-    state.history.push(entry); // re-push on failure
-    showToast(err.message, 'error');
-  } finally {
-    state.busy = false;
-    updateSwipeActionState();
-    updateUndoButtonState();
-  }
 }
 
 // Keep the Undo button's disabled state in sync with the history stack.
