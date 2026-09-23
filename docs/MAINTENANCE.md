@@ -251,3 +251,12 @@ job-hunt-watchdog` → `active` (×3);
 `stat -c %y app.py`.
 
 
+
+## 2026-09-22 23:27 — CodeRabbit UI redesign merged and LIVE
+
+- Source: origin/coderabbit/changes/77ea52b5 (4eba84d, authored by Gabriel) — "Redesign job review navigation and mobile controls, add pipeline analytics, and fix theme toggling, swipe action states, and notifications route syntax". Merged into main as 8155829 and pushed to tinder4jobs (range 4fdd00a..8155829).
+- Conflict resolved: static/js/swipe.js was the only conflicted file (delete-vs-modify around undoLast()). Resolution keeps BOTH sides: main's JSON-body revert fix (body: JSON.stringify({ action: entry.action })) and the redesign's updateSwipeActionState(), handleDuplicate(), track-pill, TRACK_THEME palette, mobile filter popover and mobile-add-job-btn.
+- Synced the same 8 visual files into jobhunt-suite/webapp and pushed suite main (0528276..0198799); sha256 hashes match the deployed copies for styles.css, analytics.js, nav.js, swipe.js, common.js and all three templates.
+- Web restarted at 23:27:02 (new MainPID 1978245, NRestarts=0). The live /login page still renders the guard (const next = ""), and the merged templates/base.html now carries the new topbar: sidebar-toggle (hamburger, left), sidebar-close (panel close button), Jobs nav label, energy bar and the content--swipe class.
+- Verified the merged templates render through Flask test client against a throwaway DB copy (JOBHUNT_DB=/tmp/verify_review.sqlite3): /review -> 200, Design System v3 hits 0, sidebar-toggle hits 2, sidebar-close hits 2, mobile-queue-count hits 2. Production DB was never written by the check.
+- Note: /swipe is not a route - the page route is /review (mapped to swipe_page), and /login is a standalone template that never extends base.html, so the topbar is only visible on authenticated pages.
