@@ -6,6 +6,7 @@ import sqlite3
 from contextlib import closing
 from datetime import date, datetime, timezone
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from database import CANONICAL_LOCATIONS, detect_ai_hiring, detect_ats, get_connection, merge_duplicate_jobs, normalize_location, normalize_track_value, overlay_job_archived, queue_write
 
@@ -80,8 +81,9 @@ def get_notifications() -> list[dict[str, Any]]:
 
             # Rejected: only if <= 30 days old (to keep UI tidy)
             elif status == "Rejected":
-                days_ago = _days_ago(job.get("updated_at") or job.get("email_received_at"))
-                if days_ago is None or days_ago <= 30:
+                ages = [_days_ago(job.get(field)) for field in ("updated_at", "email_received_at")]
+                known_ages = [age for age in ages if age is not None]
+                if not known_ages or all(age <= 30 for age in known_ages):
                     filtered.append(job)
                 else:
                     # Older rejection moved to unsure (daemon may purge or keep for history)
@@ -618,6 +620,11 @@ def set_job_deadline(job_id: int, deadline: Optional[str]) -> None:
     """
     if not _job_exists(job_id):
         raise KeyError("Job not found")
+    if deadline:
+        try:
+            date.fromisoformat(str(deadline))
+        except ValueError as exc:
+            raise ValueError("application_deadline must use YYYY-MM-DD format") from exc
     queue_write(
         "UPDATE jobs SET application_deadline = ?, "
         "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -628,7 +635,7 @@ def set_job_deadline(job_id: int, deadline: Optional[str]) -> None:
     )
 
 
-def revert_last_action(job_id: int) -> str:
+def revert_last_action(job_id: int, action: Optional[str] = None) -> str:
     """Undo the most recent swipe action on a job (Like → Review to Apply).
 
     Clears the most recent job_preferences row for this job and restores the
@@ -641,18 +648,35 @@ def revert_last_action(job_id: int) -> str:
     """
     with closing(get_connection()) as conn:
         row = conn.execute(
-            "SELECT id, preference, source_status FROM job_preferences "
-            "WHERE job_id = ? ORDER BY id DESC LIMIT 1",
+            "SELECT p.id, p.preference, p.source_status, j.title, j.company "
+            "FROM job_preferences p JOIN jobs j ON j.id = p.job_id "
+            "WHERE p.job_id = ? ORDER BY p.id DESC LIMIT 1",
             (job_id,),
         ).fetchone()
 
         if row is None:
-            current = conn.execute("SELECT status FROM jobs WHERE id = ?", (job_id,)).fetchone()
+            current = conn.execute(
+                "SELECT status, unsure FROM jobs WHERE id = ?", (job_id,)
+            ).fetchone()
             if current is None:
                 raise KeyError("Job not found")
+            if action == "unsure" and current["status"] == AWAITING_RESPONSE_STATUS and current["unsure"]:
+                conn.execute(
+                    "UPDATE jobs SET status=?, unsure=0, not_interested_checked=0, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                    (REVIEW_STATUS, job_id),
+                )
+                conn.commit()
+                return REVIEW_STATUS
+            if action == "expired" and current["status"] == PASSED_STATUS:
+                conn.execute(
+                    "UPDATE jobs SET status=?, unsure=0, passed_at=NULL, not_interested_checked=0, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                    (REVIEW_STATUS, job_id),
+                )
+                conn.commit()
+                return REVIEW_STATUS
             raise ValueError(
                 f"Cannot revert job #{job_id}: no reversible swipe recorded "
-                f"(current status: {current['status']}). Only Like/D dislike/Superdislike can be undone."
+                f"(current status: {current['status']})."
             )
 
         preference = row["preference"]
@@ -661,16 +685,35 @@ def revert_last_action(job_id: int) -> str:
                 f"Cannot revert: last preference was '{preference}', only liked/disliked/superdisliked are undoable."
             )
 
-        # Remove the preference row(s) for this job, restoring the canonical
-        # "not yet decided" state.
-        conn.execute("DELETE FROM job_preferences WHERE job_id = ?", (job_id,))
+        # Remove only the latest canonical signal and its matching legacy
+        # daemon signal. Older history must not be erased by a single undo.
+        conn.execute("DELETE FROM job_preferences WHERE id = ?", (row["id"],))
+        legacy_preference = "like" if preference == "liked" else "dislike"
+        try:
+            conn.execute(
+                """
+                DELETE FROM job_preference
+                WHERE id = (
+                    SELECT id FROM job_preference
+                    WHERE title = ? AND COALESCE(company, '') = COALESCE(?, '')
+                      AND preference = ?
+                    ORDER BY id DESC LIMIT 1
+                )
+                """,
+                (row["title"], row["company"], legacy_preference),
+            )
+        except sqlite3.OperationalError:
+            pass
+        has_older = conn.execute(
+            "SELECT 1 FROM job_preferences WHERE job_id = ? LIMIT 1", (job_id,)
+        ).fetchone() is not None
 
         # Reset the job to the review queue. Track is NOT restored (the user's
         # reclassification via superdislike is kept — they made a deliberate call).
         conn.execute(
             "UPDATE jobs SET status = ?, unsure = 0, not_interested_checked = 0, "
-            "preference_added = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (REVIEW_STATUS, job_id),
+            "preference_added = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (REVIEW_STATUS, 1 if has_older else 0, job_id),
         )
         conn.commit()
 
@@ -806,6 +849,11 @@ def mark_applied(
             f"Only 'Ready to Apply' jobs can be marked as applied (current status: {current['status']})"
         )
 
+    if applied_at:
+        try:
+            date.fromisoformat(str(applied_at))
+        except ValueError as exc:
+            raise ValueError("applied_at must use YYYY-MM-DD format") from exc
     payload = {
         "status": AWAITING_RESPONSE_STATUS,
         "applied_at": applied_at or current["applied_at"] or date.today().isoformat(),
@@ -910,6 +958,10 @@ def create_manual_job(title: str, company: str, link: Optional[str] = None, loca
     company = (company or "").strip()
     if not title or not company:
         raise ValueError("Title and company are required")
+    if link:
+        parsed = urlparse(link)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("Link must be an http(s) URL")
 
     from shared_schema import normalize_title_key, normalize_company_name
 
@@ -921,11 +973,13 @@ def create_manual_job(title: str, company: str, link: Optional[str] = None, loca
 
         # Look for a likely duplicate: same company and a title that
         # either matches exactly or shares >= 2 words.
-        existing_id = None
+        link_match = conn.execute("SELECT id FROM jobs WHERE link = ?", (link,)).fetchone() if link else None
+        existing_id = link_match["id"] if link_match else None
         for row in conn.execute(
-            "SELECT id, title FROM jobs WHERE title IS NOT NULL AND company IS NOT NULL AND id != ?",
-            (None,),
+            "SELECT id, title, company FROM jobs WHERE title IS NOT NULL AND company IS NOT NULL",
         ).fetchall():
+            if existing_id is not None:
+                break
             existing_title = str(row["title"] or "").strip()
             existing_company = str(row["company"] or "").strip()
             if not existing_title or not existing_company:
@@ -944,13 +998,18 @@ def create_manual_job(title: str, company: str, link: Optional[str] = None, loca
             conn.execute(
                 """
                 UPDATE jobs SET link = COALESCE(?, link), date_found = ?,
-                                   track = COALESCE(?, track), is_modified = 1, updated_at = CURRENT_TIMESTAMP
+                                   source = 'manual', is_modified = 1, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
-                (link, date.today().isoformat(), link and "manual" or None, existing_id),
+                (link, date.today().isoformat(), existing_id),
             )
+            if location:
+                conn.execute(
+                    "INSERT OR IGNORE INTO job_locations (job_id, location) VALUES (?, ?)",
+                    (existing_id, normalize_location(location)),
+                )
             conn.commit()
-            return {"job_id": existing_id, "merged": False}
+            return {"job_id": existing_id, "merged": True}
 
         conn.execute(
             """
@@ -961,9 +1020,12 @@ def create_manual_job(title: str, company: str, link: Optional[str] = None, loca
             """,
             ("manual", date.today().isoformat(), title, company, link),
         )
-        new_id = conn.execute("SELECT id FROM jobs WHERE title = ? AND company = ?", (title, company)).fetchone()[0]
+        new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         if location:
-            conn.execute("INSERT INTO job_locations (job_id, location) VALUES (?, ?)", (new_id, location))
+            conn.execute(
+                "INSERT OR IGNORE INTO job_locations (job_id, location) VALUES (?, ?)",
+                (new_id, normalize_location(location)),
+            )
         conn.commit()
         return {"job_id": new_id, "merged": False}
 def get_notification_counts() -> dict[str, int]:
@@ -986,7 +1048,8 @@ def get_notification_counts() -> dict[str, int]:
               AND COALESCE(unsure, 0) = 0
               AND (
                   status != 'Rejected'
-                  OR COALESCE(email_received_at, updated_at) >= datetime('now', '-30 days')
+                  OR ((updated_at IS NULL OR updated_at >= datetime('now', '-30 days'))
+                      AND (email_received_at IS NULL OR email_received_at >= datetime('now', '-30 days')))
               )
             GROUP BY status
             """,
@@ -1024,6 +1087,8 @@ def search_jobs(q: str, exclude_id: Optional[int] = None) -> list[dict[str, Any]
 
 def save_job_notes(job_id: int, notes: str) -> None:
     """Save free-text notes. Durable via queue_write (stages under daemon lock)."""
+    if not _job_exists(job_id):
+        raise KeyError("Job not found")
     queue_write(
         "UPDATE jobs SET notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (notes, job_id),
@@ -1055,6 +1120,8 @@ def set_job_archived(job_id: int, archived: bool = True) -> bool:
     staged (deferred), False if it applied immediately — reads overlay staged
     values either way, so the UI always reflects the latest intent.
     """
+    if not _job_exists(job_id):
+        raise KeyError("Job not found")
     return queue_write(
         "UPDATE jobs SET archived = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (1 if archived else 0, job_id),
@@ -1068,7 +1135,7 @@ def set_job_archived(job_id: int, archived: bool = True) -> bool:
 
 
 def get_upcoming_interviews(user_id: int) -> list[dict[str, Any]]:
-    """Return interview prep entries with an interview_date in the next 30 days."""
+    """Return all non-past interview prep entries for the user."""
     with closing(get_connection()) as conn:
         rows = conn.execute(
             """
@@ -1077,7 +1144,7 @@ def get_upcoming_interviews(user_id: int) -> list[dict[str, Any]]:
             LEFT JOIN jobs j ON j.id = ip.job_id
             WHERE ip.user_id = ?
               AND ip.interview_date IS NOT NULL
-              AND date(ip.interview_date) <= date('now', '+30 days')
+              AND date(ip.interview_date) >= date('now')
             ORDER BY ip.interview_date ASC
             """,
             (user_id,),
@@ -1109,6 +1176,16 @@ def save_interview_prep(
     questions: Optional[str] = None,
     follow_up_at: Optional[str] = None,
 ) -> dict[str, Any]:
+    company = str(company or "").strip()
+    role = str(role or "").strip()
+    if not company or not role:
+        raise ValueError("Company and role are required")
+    for field_name, value in (("interview_date", interview_date), ("follow_up_at", follow_up_at)):
+        if value:
+            try:
+                date.fromisoformat(str(value)[:10])
+            except ValueError as exc:
+                raise ValueError(f"{field_name} must use an ISO date") from exc
     with closing(get_connection()) as conn:
         existing = None
         if interview_id is not None:
@@ -1116,7 +1193,9 @@ def save_interview_prep(
                 "SELECT id FROM interview_prep WHERE id = ? AND user_id = ?",
                 (interview_id, user_id),
             ).fetchone()
-        if existing is None and job_id is not None:
+            if existing is None:
+                raise KeyError("Interview not found")
+        elif job_id is not None:
             existing = conn.execute(
                 "SELECT id FROM interview_prep WHERE user_id = ? AND job_id IS ?",
                 (user_id, job_id),
@@ -1173,6 +1252,19 @@ def create_contact(
     notes: Optional[str] = None,
     warmth: int = 1,
 ) -> dict[str, Any]:
+    name = str(name or "").strip()
+    if not name:
+        raise ValueError("Contact name is required")
+    try:
+        warmth = int(warmth)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Warmth must be 1, 2, or 3") from exc
+    if warmth not in {1, 2, 3}:
+        raise ValueError("Warmth must be 1, 2, or 3")
+    if linkedin:
+        parsed = urlparse(str(linkedin).strip())
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("LinkedIn URL must be an http(s) URL")
     with closing(get_connection()) as conn:
         conn.execute(
             """
@@ -1188,6 +1280,19 @@ def create_contact(
 
 
 def update_contact(user_id: int, contact_id: int, data: dict) -> dict[str, Any]:
+    if "name" in data and not str(data["name"] or "").strip():
+        raise ValueError("Contact name is required")
+    if "warmth" in data:
+        try:
+            data["warmth"] = int(data["warmth"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Warmth must be 1, 2, or 3") from exc
+        if data["warmth"] not in {1, 2, 3}:
+            raise ValueError("Warmth must be 1, 2, or 3")
+    if data.get("linkedin_url"):
+        parsed = urlparse(str(data["linkedin_url"]).strip())
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("LinkedIn URL must be an http(s) URL")
     with closing(get_connection()) as conn:
         existing = conn.execute(
             "SELECT id FROM contacts WHERE id = ? AND user_id = ?",

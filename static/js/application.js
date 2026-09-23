@@ -48,7 +48,7 @@ const prefs = { sort: 'score', ats: '' };
 
 function daysUntil(iso) {
   if (!iso) return null;
-  const d = new Date(iso);
+  const d = parseLocalDate(iso);
   if (isNaN(d)) return null;
   return Math.round((d - Date.now()) / 86400000);
 }

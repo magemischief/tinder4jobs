@@ -107,11 +107,12 @@ store, zero flusher errors since restart.
   stamps are naive-UTC to match `CURRENT_TIMESTAMP` storage.
 
 ### Web app exposure / auth
-- `app.run` binds `127.0.0.1` only (was 0.0.0.0 — no password/CSRF, so LAN
-  exposure handed over the whole DB). Reloader now follows `FLASK_DEBUG`
-  (prod unit sets 0; always-on reloader forked twice and confused systemd).
-- Auth is still username-only (`get_or_create_user`) — acceptable for a
-  localhost-only single-user tool; revisit before ever exposing it.
+- `app.run` binds `0.0.0.0` so trusted devices on the local network can use
+  the app. Reloader follows `FLASK_DEBUG` (prod unit sets 0; an always-on
+  reloader forked twice and confused systemd status).
+- Auth is username-only (`get_or_create_user`) and is intentionally suitable
+  only for a trusted local network. Add password authentication and CSRF
+  protection before exposing the service beyond that network.
 
 ### Daemon shutdown
 - `DaemonLoop.shutdown` waits 30s per pipeline (was 300s × 7 = 35 min worst
@@ -165,3 +166,39 @@ store, zero flusher errors since restart.
 - How to verify: `git status -sb` in both repos shows a clean tree apart from
   the scratch files; `git log --oneline -3` in `job-hunt` ends at
   `Seperate from daemon` → root (`Web app`).
+
+
+## 2026-09-22 — CodeRabbit fixes synced into both repos (`jobhunt-suite@0528276`)
+
+- Source: `jobhunt-suite@0528276` ("Fix job deduplication, swipe undo,
+  preferences, and badge delivery"). Files copied per that commit's file list:
+  `webapp/*` → this repo, `daemon/*` → `jobhunt-daemon`, shared `*.py` → repo
+  roots. Every copied file was verified byte-identical with `cmp` before commit
+  (gate in the sync script), except the two intentional divergences below.
+- Web changes: `safe_next_url` open-redirect guard (`url_utils.py`, used by
+  `app.py`'s login redirect), `JOBHUNT_LIVERELOAD` opt-in gate on
+  `/api/livereload`, user-scoped deletes + 404-on-missing-key in
+  `api/routes.py`, dedup that preserves web-owned tables (`database.py`,
+  `services/job_service.py`), swipe undo / preference badges
+  (`services/user_service.py`, `static/js/*`), new `badge_events.py`.
+- Daemon changes (pushed in `jobhunt-daemon`): dedup-preserving
+  `core/database.py`, `mail_tracker/tracker.py`, `processing/passed_checker.py`,
+  plus write-queue, path and logging hardening.
+- Divergence 1 — `.python-version`: the payload pinned `3.12`, but every venv on
+  this host is CPython 3.14.7 (`job-hunt/.venv`, `jobhunt-daemon/jobdaemon-venv`,
+  daemon uv `.venv`) and `uv` honours this file, so it is committed as `3.14`.
+  The suite copy still says 3.12.
+- Divergence 2 — this note (the suite's `webapp/docs/MAINTENANCE.md` is
+  unchanged).
+- Still untracked by policy: `tests/*` is gitignored in both repos, so the
+  payload's `test_regressions.py`, `test_database_config.py` and
+  `test_safety_regressions.py` sit on disk untracked.
+- Services were NOT restarted. The running web app re-reads templates/static but
+  keeps the old Python modules in memory; the daemon keeps its loaded modules
+  until restarted. Changes take effect on the next restart.
+- Test status at sync time: daemon suite 14/14 pass; web suite 46 tests with 4
+  failures — 2 pre-existing on pre-sync code (streak/XP assertions) and 2 inside
+  the payload itself (`tickets [0,1,0,1]`, `freeze 1≠2`). Since this sync is a
+  pure file copy, they are not sync-induced; root-causing those two against the
+  new badge/ticket code is the open follow-up.
+

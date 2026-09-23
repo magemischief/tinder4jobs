@@ -14,7 +14,7 @@ import sqlite3
 import sys
 import threading
 import time
-from contextlib import closing
+from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -518,6 +518,7 @@ def pending_prefs_overlay(user_id: int) -> dict | None:
 
 
 
+@contextmanager
 def locked_connection(timeout: float = 60.0):
     """Open a main-DB connection that waits behind the daemon's write lock.
 
@@ -745,17 +746,15 @@ def merge_duplicate_jobs(conn: sqlite3.Connection, kept_job_id: int, removed_job
     if kept_row is None or removed_row is None:
         raise ValueError("Both jobs must exist before merging")
 
-    # Mark the kept job as Duplicate if it was in the review queue
-    # so it won't appear in the jobs to review list after merging
-    if kept_row.get("status") == "Review to Apply":
-        conn.execute(
-            "UPDATE jobs SET status = 'Duplicate', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (kept_job_id,),
-        )
-
     kept_description = str(kept_row.get("description") or "")
     removed_description = str(removed_row.get("description") or "")
-    if _job_description_score(removed_description) > _job_description_score(kept_description):
+    def description_score(value: str) -> tuple[int, int]:
+        cleaned = " ".join(value.split())
+        placeholders = {"", "none", "n/a", "na", "not specified", "no description provided"}
+        meaningful = 0 if cleaned.lower() in placeholders else 1
+        return meaningful, len(cleaned)
+
+    if description_score(removed_description) > description_score(kept_description):
         conn.execute(
             "UPDATE jobs SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (removed_description, kept_job_id),
@@ -788,6 +787,49 @@ def merge_duplicate_jobs(conn: sqlite3.Connection, kept_job_id: int, removed_job
                 existing_locations.append(s)
 
     merged_locations = _save_locations_for_job(conn, kept_job_id, existing_locations)
+
+    # Preserve all user-owned data that points at the duplicate before deleting
+    # it. The two per-user tables can conflict when both jobs have state, so
+    # merge those rows explicitly instead of relying on a blind UPDATE.
+    for state in conn.execute(
+        "SELECT * FROM user_job_state WHERE job_id = ?", (removed_job_id,)
+    ).fetchall():
+        conn.execute(
+            """
+            INSERT INTO user_job_state (user_id, job_id, status, score, last_seen_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, job_id) DO UPDATE SET
+                status = excluded.status,
+                score = COALESCE(excluded.score, user_job_state.score),
+                last_seen_at = MAX(excluded.last_seen_at, user_job_state.last_seen_at)
+            """,
+            (state["user_id"], kept_job_id, state["status"], state["score"], state["last_seen_at"]),
+        )
+    conn.execute("DELETE FROM user_job_state WHERE job_id = ?", (removed_job_id,))
+
+    for score in conn.execute(
+        "SELECT * FROM job_scores WHERE job_id = ?", (removed_job_id,)
+    ).fetchall():
+        conn.execute(
+            """
+            INSERT INTO job_scores (user_id, job_id, score, confidence, reasoning, scored_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, job_id) DO UPDATE SET
+                score = excluded.score,
+                confidence = excluded.confidence,
+                reasoning = excluded.reasoning,
+                scored_at = MAX(excluded.scored_at, job_scores.scored_at)
+            """,
+            (
+                score["user_id"], kept_job_id, score["score"], score["confidence"],
+                score["reasoning"], score["scored_at"],
+            ),
+        )
+    conn.execute("DELETE FROM job_scores WHERE job_id = ?", (removed_job_id,))
+
+    for table in ("job_preferences", "cover_letters", "interview_prep", "user_session_stats"):
+        conn.execute(f"UPDATE {table} SET job_id = ? WHERE job_id = ?", (kept_job_id, removed_job_id))
+
     conn.execute("DELETE FROM jobs WHERE id = ?", (removed_job_id,))
     conn.commit()
     return {

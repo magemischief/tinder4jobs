@@ -31,13 +31,15 @@ function renderContacts(rows) {
   }
   empty.classList.add('hidden');
 
-  tbody.innerHTML = rows.map((c) => `
+  tbody.innerHTML = rows.map((c) => {
+    const linkedIn = safeUrl(c.linkedin_url);
+    return `
     <tr data-id="${c.id}">
       <td>${escapeHTML(c.name || '')}</td>
       <td>${escapeHTML(c.company || '')}</td>
       <td>${escapeHTML(c.role || '')}</td>
       <td>${c.email ? `<a href="mailto:${escapeHTML(c.email)}">${escapeHTML(c.email)}</a>` : '—'}</td>
-      <td>${c.linkedin_url ? `<a class="link-button" href="${escapeHTML(c.linkedin_url)}" target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>` : '—'}</td>
+      <td>${linkedIn ? `<a class="link-button" href="${escapeHTML(linkedIn)}" target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>` : '—'}</td>
       <td>${warmthBadge(Number(c.warmth || 1))}</td>
       <td>${escapeHTML(c.notes || '')}</td>
       <td class="row-actions">
@@ -45,7 +47,8 @@ function renderContacts(rows) {
         <button class="btn btn--sm btn--danger-ghost js-delete" data-id="${c.id}" type="button">Delete</button>
       </td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function filterContacts() {

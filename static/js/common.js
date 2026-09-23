@@ -13,6 +13,14 @@ function safeUrl(value) {
   return /^https?:\/\//i.test(raw) ? raw : '';
 }
 
+// Date-only values represent a local calendar day, not UTC midnight. Parsing
+// YYYY-MM-DD directly with Date can display the previous day west of UTC.
+function parseLocalDate(value) {
+  if (!value) return new Date(NaN);
+  const text = String(value);
+  return new Date(/^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text}T00:00:00` : text);
+}
+
 function showToast(message, type = 'info', sticky = false) {
   let container = document.getElementById('toast-container');
   if (!container) {
@@ -117,12 +125,17 @@ if (document.readyState === 'loading') {
 (function () {
   let lastMtime = 0;
   const checkInterval = 2000;
+  let timer = null;
 
   async function checkForChanges() {
     try {
       const res = await fetch('/_livereload/check', { credentials: 'same-origin' });
       if (!res.ok) return;
       const data = await res.json();
+      if (data.enabled === false) {
+        if (timer) clearInterval(timer);
+        return;
+      }
       if (lastMtime && data.mtime > lastMtime) {
         console.log('[LiveReload] Detected file changes, reloading...');
         window.location.reload();
@@ -136,6 +149,6 @@ if (document.readyState === 'loading') {
   // Start polling after a brief delay to let the page settle
   setTimeout(() => {
     checkForChanges();
-    setInterval(checkForChanges, checkInterval);
+    timer = setInterval(checkForChanges, checkInterval);
   }, 500);
 })();

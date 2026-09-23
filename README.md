@@ -96,6 +96,11 @@ not added as an application dependency. Production services were left running.
 
 This is the frontend webapp for the Job Hunt Command Center. It provides a swipe-based interface for reviewing job listings, managing applications, tracking badges, and more.
 
+The service is designed for a trusted local network. Usernames separate
+preferences, badges, and personal feature data, while the core job pipeline
+(`jobs.status`, applications, and notifications) is deliberately shared by
+everyone using the instance. It is not a tenant-isolated hosted service.
+
 ## Tech Stack
 
 - **Backend:** Flask 3.x (Python)

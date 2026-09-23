@@ -13,10 +13,12 @@ from flask import Blueprint, Response, jsonify, request
 
 from services import job_service
 from services import user_service
+from badge_events import BadgeEventBroker
 
 logger = logging.getLogger(__name__)
 
 api = Blueprint("api", __name__, url_prefix="/api")
+_badge_broker = BadgeEventBroker()
 
 
 def _get_user():
@@ -31,7 +33,7 @@ def _require_user():
     return user, None
 
 
-def _record_and_badge(user_id, action_type, job_id=None):
+def _record_and_badge(user_id, action_type, job_id=None, *, mark_state=True):
     """Record an action stat, run badge checks, and award lottery tickets.
     Returns (newly_awarded, points_earned, tickets_earned)."""
     # The badge engine (user_session_stats.job_score) scores on a 0-100 scale,
@@ -42,13 +44,13 @@ def _record_and_badge(user_id, action_type, job_id=None):
     if job_score is not None:
         job_score = job_score * 10
     points_earned = user_service.record_action(user_id, action_type, job_id=job_id, job_score=job_score)
-    if job_id:
+    if job_id and mark_state:
         user_service.mark_job_seen(user_id, job_id, action_type, score=job_score)
     newly_awarded = user_service.check_and_award_badges(user_id)
     tickets_earned = user_service.LotterySystem.award_on_action(user_id, action_type, job_id)
-    # Push newly-awarded badges to the SSE live feed queue for real-time clients.
+    # Broadcast newly-awarded badges to every open tab for this user.
     for badge in newly_awarded:
-        _badges_live_queue.put({"user_id": user_id, "badge": badge})
+        _badge_broker.publish(user_id, badge)
     return newly_awarded, points_earned, tickets_earned
 
 
@@ -201,13 +203,18 @@ def revert_job(job_id: int):
         return error
 
     try:
-        restored_status = job_service.revert_last_action(job_id)
+        action = (request.get_json(silent=True) or {}).get("action")
+        if action == "superdislike":
+            action = "dislike"
+        if action not in {None, "like", "dislike", "unsure", "expired"}:
+            return jsonify({"error": "Invalid action to undo"}), 400
+        restored_status = job_service.revert_last_action(job_id, action)
     except KeyError:
         return jsonify({"error": "Job not found"}), 404
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 409
 
-    newly_awarded, points_earned, tickets_earned = _record_and_badge(user["id"], "undo", job_id)
+    user_service.undo_recorded_action(user["id"], job_id, action)
     return jsonify({"ok": True, "job_id": job_id, "status": restored_status})
 
 
@@ -226,8 +233,17 @@ def mark_expired(job_id: int):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 409
 
-    newly_awarded = _record_and_badge(user["id"], "expired", job_id)
-    return jsonify({"ok": True, "job_id": job_id, "status": status, "new_badges": newly_awarded})
+    newly_awarded, points_earned, tickets_earned = _record_and_badge(
+        user["id"], "expired", job_id
+    )
+    return jsonify({
+        "ok": True,
+        "job_id": job_id,
+        "status": status,
+        "new_badges": newly_awarded,
+        "points_earned": points_earned,
+        "tickets_earned": tickets_earned,
+    })
 
 
 @api.post("/jobs/<int:job_id>/merge")
@@ -275,8 +291,17 @@ def mark_duplicate(job_id: int):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 409
 
-    newly_awarded = _record_and_badge(user["id"], "duplicate", job_id)
-    return jsonify({"ok": True, "result": result, "new_badges": newly_awarded})
+    stats_job_id = result["kept_job_id"] if result.get("merged") else job_id
+    newly_awarded, points_earned, tickets_earned = _record_and_badge(
+        user["id"], "duplicate", stats_job_id, mark_state=not result.get("merged")
+    )
+    return jsonify({
+        "ok": True,
+        "result": result,
+        "new_badges": newly_awarded,
+        "points_earned": points_earned,
+        "tickets_earned": tickets_earned,
+    })
 
 
 @api.get("/jobs/<int:job_id>/duplicate-candidates")
@@ -292,7 +317,7 @@ def duplicate_candidates(job_id: int):
     return jsonify({"candidates": candidates, "count": len(candidates)})
 
 
-@api.get(\"/notifications\")
+@api.get("/notifications")
 def notifications():
     user, error = _require_user()
     if error:
@@ -348,7 +373,10 @@ def get_job_notes(job_id: int):
     user, error = _require_user()
     if error:
         return error
-    notes = job_service.get_job_notes(job_id)
+    try:
+        notes = job_service.get_job_notes(job_id)
+    except KeyError:
+        return jsonify({"error": "Job not found"}), 404
     return jsonify({"notes": notes})
 
 
@@ -358,7 +386,10 @@ def save_job_notes(job_id: int):
     if error:
         return error
     data = request.get_json(silent=True) or {}
-    result = job_service.save_job_notes(job_id, data.get("notes", ""))
+    try:
+        result = job_service.save_job_notes(job_id, data.get("notes", ""))
+    except KeyError:
+        return jsonify({"error": "Job not found"}), 404
     return jsonify({"ok": True, "notes": result})
 
 
@@ -373,6 +404,8 @@ def archive_job(job_id: int):
     archived = data.get("archived", True)
     try:
         staged = job_service.set_job_archived(job_id, archived)
+    except KeyError:
+        return jsonify({"error": "Job not found"}), 404
     except Exception:
         logger.exception("Failed to archive job %s", job_id)
         return jsonify({"error": "Could not archive job"}), 500
@@ -385,7 +418,12 @@ def set_job_deadline(job_id: int):
     if error:
         return error
     data = request.get_json(silent=True) or {}
-    job_service.set_job_deadline(job_id, data.get("application_deadline"))
+    try:
+        job_service.set_job_deadline(job_id, data.get("application_deadline"))
+    except KeyError:
+        return jsonify({"error": "Job not found"}), 404
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify({"ok": True})
 
 
@@ -406,17 +444,22 @@ def save_interview():
     if error:
         return error
     data = request.get_json(silent=True) or {}
-    result = job_service.save_interview_prep(
-        user_id=user["id"],
-        company=data.get("company", ""),
-        role=data.get("role", ""),
-        interview_id=data.get("interview_id"),
-        job_id=data.get("job_id"),
-        interview_date=data.get("interview_date"),
-        prep_notes=data.get("prep_notes"),
-        questions=data.get("questions"),
-        follow_up_at=data.get("follow_up_at"),
-    )
+    try:
+        result = job_service.save_interview_prep(
+            user_id=user["id"],
+            company=data.get("company", ""),
+            role=data.get("role", ""),
+            interview_id=data.get("interview_id"),
+            job_id=data.get("job_id"),
+            interview_date=data.get("interview_date"),
+            prep_notes=data.get("prep_notes"),
+            questions=data.get("questions_to_ask", data.get("questions")),
+            follow_up_at=data.get("follow_up_at"),
+        )
+    except KeyError:
+        return jsonify({"error": "Interview not found"}), 404
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify({"ok": True, "interview": result})
 
 
@@ -449,16 +492,19 @@ def create_contact():
     if error:
         return error
     data = request.get_json(silent=True) or {}
-    contact = job_service.create_contact(
-        user_id=user["id"],
-        name=data.get("name", ""),
-        company=data.get("company"),
-        role=data.get("role"),
-        email=data.get("email"),
-        linkedin=data.get("linkedin"),
-        notes=data.get("notes"),
-        warmth=data.get("warmth", 1),
-    )
+    try:
+        contact = job_service.create_contact(
+            user_id=user["id"],
+            name=data.get("name", ""),
+            company=data.get("company"),
+            role=data.get("role"),
+            email=data.get("email"),
+            linkedin=data.get("linkedin"),
+            notes=data.get("notes"),
+            warmth=data.get("warmth", 1),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify({"ok": True, "contact": contact}), 201
 
 
@@ -468,6 +514,8 @@ def update_contact(contact_id: int):
     if error:
         return error
     data = request.get_json(silent=True) or {}
+    if "linkedin" in data and "linkedin_url" not in data:
+        data["linkedin_url"] = data.pop("linkedin")
     try:
         contact = job_service.update_contact(user["id"], contact_id, data)
     except KeyError:
@@ -510,7 +558,10 @@ def use_streak_freeze():
     date_str = data.get("date")
     if not date_str:
         return jsonify({"error": "date is required (YYYY-MM-DD)"}), 400
-    ok, msg = user_service.use_streak_freeze(user["id"], date_str)
+    try:
+        ok, msg = user_service.use_streak_freeze(user["id"], date_str)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify({"ok": ok, "message": msg})
 
 
@@ -534,12 +585,16 @@ def upsert_skill():
     skill = data.get("skill", "").strip()
     if not skill:
         return jsonify({"error": "skill name is required"}), 400
-    result = user_service.upsert_skill_assessment(
-        user_id=user["id"],
-        skill=skill,
-        self_rating=data.get("self_rating", 3),
-        notes=data.get("notes"),
-    )
+    try:
+        result = user_service.upsert_skill_assessment(
+            user_id=user["id"],
+            skill=skill,
+            self_rating=data.get("self_rating", 3),
+            notes=data.get("notes"),
+            original_skill=data.get("original_skill"),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify({"ok": True, "skill": result})
 
 
@@ -588,12 +643,15 @@ def create_cover_letter():
     body = data.get("body", "").strip()
     if not title or not body:
         return jsonify({"error": "title and body are required"}), 400
-    letter = user_service.create_cover_letter(
-        user_id=user["id"],
-        title=title,
-        body=body,
-        job_id=data.get("job_id"),
-    )
+    try:
+        letter = user_service.create_cover_letter(
+            user_id=user["id"],
+            title=title,
+            body=body,
+            job_id=data.get("job_id"),
+        )
+    except KeyError:
+        return jsonify({"error": "Job not found"}), 404
     return jsonify({"ok": True, "cover_letter": letter}), 201
 
 
@@ -632,13 +690,6 @@ def auth_profile_badges():
     return jsonify(badges)
 
 # ── SSE live badge feed (real-time badge notifications) ────────────────────────────
-import queue as _queue
-import json as _json
-
-_badges_live_queue = _queue.Queue()
-"""Thread-safe queue where newly-awarded badges are pushed.
-Each item: {"user_id": int, "badge": {key, name, description, emoji, category, earned_at}}
-SSE clients subscribe to /api/badges/live and receive events only for their own user_id."""
 
 @api.get("/badges/live")
 def badges_live():
@@ -654,18 +705,20 @@ def badges_live():
     user_id = user["id"]
 
     def event_stream():
+        subscriber = _badge_broker.subscribe(user_id)
         try:
             while True:
                 try:
-                    event = _badges_live_queue.get(timeout=30)
-                except _queue.Empty:
+                    badge = subscriber.get(timeout=30)
+                except queue.Empty:
                     yield ": keepalive\n\n"
                     continue
-                if event.get("user_id") == user_id:
-                    payload = _json.dumps(event["badge"], ensure_ascii=False)
-                    yield f"event: badge-earned\ndata: {payload}\n\n"
+                payload = json.dumps(badge, ensure_ascii=False)
+                yield f"event: badge-earned\ndata: {payload}\n\n"
         except GeneratorExit:
             pass
+        finally:
+            _badge_broker.unsubscribe(user_id, subscriber)
 
     return Response(
         event_stream(),
@@ -677,4 +730,3 @@ def badges_live():
             "Content-Type": "text/event-stream; charset=utf-8",
         },
     )
-

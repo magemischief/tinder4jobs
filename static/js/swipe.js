@@ -462,26 +462,6 @@ function animateCardExit(direction) {
   });
 }
 
-async function undoLast() {
-  if (state.busy || !state.history.length) return;
-  const entry = state.history.pop();
-  updateUndoButtonState();
-  try {
-    state.busy = true;
-    const res = await fetch(`/api/jobs/${entry.job.id}/revert`, { method: 'POST' });
-    if (!res.ok) throw new Error('Revert failed');
-    state.queue.unshift(entry.job);
-    renderCard();
-    showToast(`Undid ${entry.action} — ${entry.job.title}`, 'success');
-  } catch (err) {
-    state.history.push(entry); // re-push on failure
-    updateUndoButtonState();
-    showToast(err.message, 'error');
-  } finally {
-    state.busy = false;
-  }
-}
-
 async function handleDuplicate() {
   if (state.busy || !state.current) return;
   state.busy = true;
@@ -1027,8 +1007,13 @@ async function undoLast() {
   const entry = state.history.pop();
   try {
     state.busy = true;
-    const res = await fetch(`/api/jobs/${entry.job.id}/revert`, { method: 'POST' });
-    if (!res.ok) throw new Error('Revert failed');
+    const res = await fetch(`/api/jobs/${entry.job.id}/revert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: entry.action }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Revert failed');
     state.queue.unshift(entry.job);
     renderCard();
     showToast(`Undid ${entry.action} — ${entry.job.title}`, 'success');
@@ -1179,4 +1164,3 @@ if (document.readyState === 'loading') {
 } else {
   initSwipePage();
 }
-

@@ -9,6 +9,7 @@ from api.routes import api
 from api.auth import auth_bp
 from database import get_connection, ensure_skill_demand_columns, ensure_additive_columns, start_write_queue_flusher
 from contextlib import closing
+from url_utils import safe_next_url
 
 # The database already exists with the full schema (managed by the daemon);
 # skip the expensive init_db() and just ensure the sessions table is present.
@@ -45,6 +46,7 @@ def login_required(f):
 
 def create_app() -> Flask:
     app = Flask(__name__)
+    live_reload_enabled = os.environ.get("JOBHUNT_LIVERELOAD", "").lower() in {"1", "true", "yes"}
     # Always serve static files fresh and reload templates on disk, even when
     # FLASK_DEBUG=0. This ensures UI changes (CSS/JS/templates) are reflected
     # immediately without requiring a browser hard-refresh or server restart.
@@ -58,6 +60,8 @@ def create_app() -> Flask:
     def livereload_check():
         """Return timestamp of most recent static/template change.
         Used by client-side polling to auto-refresh on file changes."""
+        if not live_reload_enabled:
+            return jsonify({"enabled": False, "mtime": 0})
         max_mtime = 0.0
         watch_dirs = ["static", "templates"]
         for watch_dir in watch_dirs:
@@ -74,7 +78,7 @@ def create_app() -> Flask:
                                 max_mtime = m
                         except OSError:
                             pass
-        return jsonify({"mtime": max_mtime})
+        return jsonify({"enabled": True, "mtime": max_mtime})
     
     app.register_blueprint(api)
     app.register_blueprint(auth_bp)
@@ -88,12 +92,12 @@ def create_app() -> Flask:
         from services import user_service
         user = user_service.get_logged_in_user(request)
         if user is not None:
-            next_url = request.args.get("next", "")
+            next_url = safe_next_url(request.args.get("next", ""))
             return redirect(next_url or url_for("swipe_page"))
         return render_template(
             "login.html",
             active_page="login",
-            next=request.args.get("next", ""),
+            next=safe_next_url(request.args.get("next", "")),
         )
 
     @app.get("/review")

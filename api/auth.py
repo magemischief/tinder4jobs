@@ -106,7 +106,10 @@ def save_all_regions():
     regions = data.get("regions", [])
     if not isinstance(regions, list):
         return jsonify({"error": "regions must be a list"}), 400
-    saved = user_service.save_regions(user["id"], regions)
+    try:
+        saved = user_service.save_regions(user["id"], regions)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify({"regions": saved, "ok": True})
 
 
@@ -116,7 +119,9 @@ def remove_region(region_id: int):
     user, error, status = require_login()
     if error:
         return error, status
-    user_service.delete_region(region_id)
+    deleted = user_service.delete_region(user["id"], region_id)
+    if not deleted:
+        return jsonify({"error": "Region not found"}), 404
     return jsonify({"ok": True, "regions": user_service.get_user_regions(user["id"])})
 
 
@@ -144,7 +149,10 @@ def save_all_tracks():
     tracks = data.get("tracks", [])
     if not isinstance(tracks, list):
         return jsonify({"error": "tracks must be a list"}), 400
-    saved = user_service.save_user_tracks(user["id"], tracks)
+    try:
+        saved = user_service.save_user_tracks(user["id"], tracks)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify({"tracks": saved, "ok": True})
 
 
@@ -154,7 +162,7 @@ def remove_track(track_id: int):
     user, error, status = require_login()
     if error:
         return error, status
-    deleted = user_service.delete_track(track_id)
+    deleted = user_service.delete_track(user["id"], track_id)
     if not deleted:
         return jsonify({"error": "Track not found or is protected"}), 409
     return jsonify({
@@ -170,7 +178,10 @@ def save_prefs():
     if error:
         return error, status
     data = request.get_json(silent=True) or {}
-    prefs = user_service.save_user_preferences(user["id"], data)
+    try:
+        prefs = user_service.save_user_preferences(user["id"], data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify(prefs)
 
 

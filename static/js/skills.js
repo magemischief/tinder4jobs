@@ -123,6 +123,7 @@ function initSkillsPage() {
     const payload = Object.fromEntries(fd.entries());
     payload.self_rating = Number(payload.self_rating);
     const oldName = _editingSkill;
+    if (oldName) payload.original_skill = oldName;
     try {
       const res = await fetch('/api/skills', {
         method: 'POST',
@@ -132,11 +133,6 @@ function initSkillsPage() {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to save skill');
-      }
-      // Rename flow: POST upserts under the new name, so the row stored under
-      // the old name must be removed or it lingers as a duplicate.
-      if (oldName && oldName !== payload.skill) {
-        await fetch(`/api/skills/${encodeURIComponent(oldName)}`, { method: 'DELETE' });
       }
       resetEditState(form);
       showToast('Skill saved', 'success');

@@ -1,11 +1,13 @@
 let _editingId = null;
+let _allInterviews = [];
 
 async function loadInterviews() {
   try {
     const res = await fetch('/api/interviews');
     if (!res.ok) throw new Error('Failed to load interviews');
     const data = await res.json();
-    renderInterviews(data.interviews || []);
+    _allInterviews = data.interviews || [];
+    renderInterviews(_allInterviews);
   } catch (e) {
     showToast(e.message, 'error');
   }
@@ -13,7 +15,7 @@ async function loadInterviews() {
 
 function relativeDate(iso) {
   if (!iso) return '—';
-  const d = new Date(iso);
+  const d = parseLocalDate(iso);
   if (isNaN(d)) return iso;
   const days = Math.round((d - Date.now()) / 86400000);
   if (days === 0) return 'today';
@@ -58,15 +60,17 @@ document.getElementById('interviews-tbody').addEventListener('click', async (e) 
   const delBtn = e.target.closest('.js-delete');
   if (editBtn) {
     const id = Number(editBtn.dataset.id);
-    const row = document.querySelector(`tr[data-id="${id}"]`);
-    if (!row) return;
-    const cells = row.querySelectorAll('td');
+    const interview = _allInterviews.find((item) => Number(item.id) === id);
+    if (!interview) return;
     const form = document.getElementById('new-interview-form');
-    form.querySelector('[name="company"]').value = cells[0].textContent;
-    form.querySelector('[name="role"]').value = cells[1].textContent;
+    for (const field of ['company', 'role', 'interview_date', 'follow_up_at', 'prep_notes', 'questions_to_ask', 'job_id']) {
+      const input = form.querySelector(`[name="${field}"]`);
+      if (input) input.value = interview[field] || '';
+    }
     _editingId = id;
     const submitBtn = form.querySelector('button[type="submit"]');
     submitBtn.textContent = 'Update';
+    document.getElementById('interview-cancel-edit').style.display = '';
     showToast('Editing — update fields and save', 'info');
     form.scrollIntoView({ behavior: 'smooth' });
   } else if (delBtn) {
@@ -107,11 +111,20 @@ document.getElementById('new-interview-form').addEventListener('submit', async (
     e.target.reset();
     _editingId = null;
     e.target.querySelector('button[type="submit"]').textContent = 'Add / Update';
+    document.getElementById('interview-cancel-edit').style.display = 'none';
     showToast('Interview saved', 'success');
     await loadInterviews();
   } catch (err) {
     showToast(err.message, 'error');
   }
+});
+
+document.getElementById('interview-cancel-edit')?.addEventListener('click', () => {
+  const form = document.getElementById('new-interview-form');
+  form.reset();
+  _editingId = null;
+  form.querySelector('button[type="submit"]').textContent = 'Add / Update';
+  document.getElementById('interview-cancel-edit').style.display = 'none';
 });
 
 // Prefill form from URL query params (notifications "Schedule interview" link).

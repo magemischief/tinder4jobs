@@ -31,7 +31,7 @@ async function loadNotifications() {
 
 function relativeDate(iso) {
   if (!iso) return "";
-  const then = new Date(iso);
+  const then = parseLocalDate(iso);
   if (isNaN(then)) return iso;
   const now = new Date();
   const days = Math.round((then - now) / 86400000);
@@ -59,9 +59,10 @@ function renderCard(job) {
   const scheduleHref = "/interviews?" + interviewParams.toString();
   const actions = [];
   if (rawLink) actions.push(linkHtml);
-  if (job.email_link) {
+  const emailLink = safeUrl(job.email_link);
+  if (emailLink) {
     const emailTitle = job.email_subject ? "View email: " + escapeHTML(job.email_subject) : "View matched email";
-    actions.push('<a class="link-button btn-email" href="' + escapeHTML(safeUrl(job.email_link) || job.email_link) + '" target="_blank" rel="noopener noreferrer" title="' + emailTitle + '">📧 View email →</a>');
+    actions.push('<a class="link-button btn-email" href="' + escapeHTML(emailLink) + '" target="_blank" rel="noopener noreferrer" title="' + emailTitle + '">📧 View email →</a>');
   }
   if (job.email_link || job.status === "Awaiting Response" || job.status === "Responded") { actions.push('<a class="link-button" href="' + escapeHTML(scheduleHref) + '">Schedule interview →</a>'); }
   else if (job.interview_date) { actions.push('<a class="link-button" href="/interviews">View in Interviews →</a>'); }

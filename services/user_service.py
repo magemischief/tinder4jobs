@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 import secrets
+import sqlite3
 import time
 from contextlib import closing
 from datetime import date, datetime, timedelta, timezone
@@ -26,6 +27,7 @@ def create_session(user_id):
     token = _make_token()
     now = time.time()
     with closing(get_connection()) as conn:
+        conn.execute("DELETE FROM _sessions WHERE expires_at <= ?", (now,))
         conn.execute("INSERT OR REPLACE INTO _sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)", (token, user_id, now, now + SESSION_TTL_SECONDS))
         conn.commit()
     return token
@@ -123,8 +125,30 @@ def get_user_preferences(user_id):
     return prefs
 
 def save_user_preferences(user_id, prefs):
+    if not isinstance(prefs, dict):
+        raise ValueError("preferences must be an object")
+    for key in ("default_tracks", "default_keywords", "blacklist_terms"):
+        if key in prefs and (
+            not isinstance(prefs[key], list)
+            or any(not isinstance(value, str) for value in prefs[key])
+        ):
+            raise ValueError(f"{key} must be a list of strings")
+    for key, minimum, maximum in (("daily_goal", 1, 1000), ("energy_max_reviews", 0, 1000)):
+        if key in prefs:
+            try:
+                prefs[key] = int(prefs[key])
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"{key} must be an integer") from exc
+            if not minimum <= prefs[key] <= maximum:
+                raise ValueError(f"{key} must be between {minimum} and {maximum}")
+    if "theme" in prefs and prefs["theme"] not in {"light", "dark"}:
+        raise ValueError("theme must be 'light' or 'dark'")
+    if "exclude_already_seen" in prefs and not isinstance(prefs["exclude_already_seen"], bool):
+        raise ValueError("exclude_already_seen must be a boolean")
     defaults = _default_preferences()
-    merged = {**defaults, **prefs}
+    # Settings updates are PATCH-like: forms and API clients may submit only
+    # one field. Preserve all persisted (and staged) values not in this update.
+    merged = {**defaults, **get_user_preferences(user_id), **prefs}
 
     # Normalize tracks to canonical forms (Software Engineer, Data Analyst, etc.).
     # Legacy keys (default_job_types, default_locations, preferred_keywords) are
@@ -204,6 +228,8 @@ def get_user_regions(user_id):
 
 def save_regions(user_id, regions):
     """Upsert a list of regions. Each region dict: {code, name, color, sort_order, enabled, aliases: [str]}."""
+    if not isinstance(regions, list) or any(not isinstance(region, dict) for region in regions):
+        raise ValueError("regions must be a list of objects")
     with closing(get_connection()) as conn:
         for r in regions:
             code = (r.get("code") or "").strip().upper()
@@ -211,7 +237,10 @@ def save_regions(user_id, regions):
                 continue
             name = (r.get("name") or code).strip()
             color = (r.get("color") or "").strip() or None
-            sort_order = int(r.get("sort_order", 0))
+            try:
+                sort_order = int(r.get("sort_order", 0))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("region sort_order must be an integer") from exc
             enabled = 1 if r.get("enabled", True) else 0
 
             conn.execute("""
@@ -232,7 +261,10 @@ def save_regions(user_id, regions):
             if region_row:
                 region_id = region_row["id"]
                 conn.execute("DELETE FROM user_location_aliases WHERE region_id = ?", (region_id,))
-                for alias in (r.get("aliases") or []):
+                aliases = r.get("aliases") or []
+                if not isinstance(aliases, list) or any(not isinstance(alias, str) for alias in aliases):
+                    raise ValueError("region aliases must be a list of strings")
+                for alias in aliases:
                     alias_key = alias.strip().lower()
                     if alias_key:
                         conn.execute(
@@ -244,11 +276,15 @@ def save_regions(user_id, regions):
     return get_user_regions(user_id)
 
 
-def delete_region(region_id):
-    """Delete a region and all its aliases."""
+def delete_region(user_id, region_id):
+    """Delete one of the user's regions and all its aliases."""
     with closing(get_connection()) as conn:
-        conn.execute("DELETE FROM user_regions WHERE id = ?", (region_id,))
+        cursor = conn.execute(
+            "DELETE FROM user_regions WHERE id = ? AND user_id = ?",
+            (region_id, user_id),
+        )
         conn.commit()
+        return cursor.rowcount > 0
 
 
 def seed_default_regions(user_id):
@@ -367,12 +403,17 @@ def save_user_tracks(user_id, tracks):
     Terms replace the track's existing term set. 'not a fit' is reserved and
     ignored — it is never created, renamed, or listed.
     """
+    if not isinstance(tracks, list) or any(not isinstance(track, dict) for track in tracks):
+        raise ValueError("tracks must be a list of objects")
     with closing(get_connection()) as conn:
         for t in tracks:
             name = (t.get("name") or "").strip()
             if not name or name.lower() == RESERVED_TRACK:
                 continue
-            sort_order = int(t.get("sort_order", 0))
+            try:
+                sort_order = int(t.get("sort_order", 0))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("track sort_order must be an integer") from exc
             enabled = 1 if t.get("enabled", True) else 0
             # Validate: only '#rrggbb' is stored; anything else (garbage,
             # 3-digit shorthand, named colors) falls back to NULL (= default).
@@ -403,6 +444,8 @@ def save_user_tracks(user_id, tracks):
             conn.execute("DELETE FROM user_track_terms WHERE track_id = ?", (track_id,))
             for term_type, values in (("title", t.get("titles") or []),
                                       ("keyword", t.get("keywords") or [])):
+                if not isinstance(values, list):
+                    raise ValueError(f"track {term_type} terms must be a list")
                 for value in values:
                     key = str(value).strip().lower()
                     if key:
@@ -414,7 +457,7 @@ def save_user_tracks(user_id, tracks):
         conn.commit()
     return get_user_tracks(user_id)
 
-def delete_track(track_id):
+def delete_track(user_id, track_id):
     """Delete a track definition only — its jobs are kept.
 
     Returns True when a non-reserved track was deleted. Refuses the
@@ -423,14 +466,18 @@ def delete_track(track_id):
     """
     with closing(get_connection()) as conn:
         row = conn.execute(
-            "SELECT name FROM user_tracks WHERE id = ?", (track_id,)
+            "SELECT name FROM user_tracks WHERE id = ? AND user_id = ?",
+            (track_id, user_id),
         ).fetchone()
         if row is None:
             return False
         name = str(row["name"]).strip()
         if name.lower() == RESERVED_TRACK:
             return False
-        conn.execute("DELETE FROM user_tracks WHERE id = ?", (track_id,))
+        conn.execute(
+            "DELETE FROM user_tracks WHERE id = ? AND user_id = ?",
+            (track_id, user_id),
+        )
         conn.commit()
         return True
 
@@ -450,21 +497,31 @@ def seed_default_tracks(user_id):
     # Keep the legacy default_tracks preference in sync so the review filter and
     # daemon still see the same track set the editor manages.
     with closing(get_connection()) as conn:
-        row = conn.execute(
-            "SELECT default_tracks FROM user_preferences WHERE user_id = ?", (user_id,)
-        ).fetchone()
-        if row is None or not (row["default_tracks"] or "").strip():
-            names = [t["name"] for t in _DEFAULT_TRACKS]
-            conn.execute(
-                "UPDATE user_preferences SET default_tracks = ?, "
-                "updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
-                (json.dumps(names), user_id),
-            )
-            conn.commit()
+        names = [t["name"] for t in _DEFAULT_TRACKS]
+        conn.execute(
+            """
+            INSERT INTO user_preferences (user_id, default_tracks)
+            VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                default_tracks = CASE
+                    WHEN TRIM(COALESCE(user_preferences.default_tracks, '')) = ''
+                    THEN excluded.default_tracks
+                    ELSE user_preferences.default_tracks
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (user_id, json.dumps(names)),
+        )
+        conn.commit()
+
+
+REVERSIBLE_REVIEW_ACTIONS = {"like", "dislike", "unsure", "expired"}
+COUNTED_ACTIONS = REVERSIBLE_REVIEW_ACTIONS | {"duplicate", "apply"}
+COUNTED_ACTIONS_SQL = ", ".join(f"'{action}'" for action in sorted(COUNTED_ACTIONS))
 
 
 def record_action(user_id, action_type, job_id=None, job_score=None):
-    if action_type not in {"like", "dislike", "unsure", "duplicate", "apply"}:
+    if action_type not in COUNTED_ACTIONS:
         return
     points = 0
     if action_type == "apply":
@@ -545,29 +602,35 @@ class LotterySystem:
             tickets = LotterySystem.TICKETS_FOR_LIKE
         else:
             tickets = 0
-        LotterySystem._record_tickets(user_id, tickets, job_id)
+        LotterySystem._record_tickets(user_id, action_type, tickets, job_id)
         return tickets
 
     @staticmethod
-    def _record_tickets(user_id, tickets, job_id=None):
-        """Record lottery tickets in user_session_stats."""
+    def _record_tickets(user_id, action_type, tickets, job_id=None):
+        """Attach tickets to the action row that earned them."""
         if tickets <= 0:
             return
         today = date.today().isoformat()
         with closing(get_connection()) as conn:
-            conn.execute(
+            cursor = conn.execute(
                 """UPDATE user_session_stats
                    SET raffle_tickets = raffle_tickets + ?
-                   WHERE user_id = ? AND date(created_at) = ?""",
-                (tickets, user_id, today)
+                   WHERE id = (
+                       SELECT id FROM user_session_stats
+                       WHERE user_id = ? AND action_type = ?
+                         AND date(created_at) = ?
+                         AND (job_id = ? OR (? IS NULL AND job_id IS NULL))
+                       ORDER BY id DESC LIMIT 1
+                   )""",
+                (tickets, user_id, action_type, today, job_id, job_id),
             )
-            # If no row exists yet for today, insert one
-            if conn.total_changes == 0:
+            # Keep direct callers correct even if no action row was recorded first.
+            if cursor.rowcount == 0:
                 conn.execute(
                     """INSERT INTO user_session_stats
                        (user_id, action_type, job_id, points, raffle_tickets, created_at)
-                       VALUES (?, 'lottery', ?, 0, ?, ?)""",
-                    (user_id, job_id or 0, tickets, today)
+                       VALUES (?, ?, ?, 0, ?, ?)""",
+                    (user_id, action_type, job_id, tickets, today),
                 )
             conn.commit()
 
@@ -648,30 +711,45 @@ def _action_counts_query(user_id, today_only):
 
 def get_today_stats(user_id):
     rows = _action_counts_query(user_id, today_only=True)
-    counts = {a: 0 for a in ["like", "dislike", "unsure", "duplicate", "apply"]}
+    counts = {a: 0 for a in COUNTED_ACTIONS}
     for row in rows:
-        counts[row["action_type"]] = row["count"]
+        if row["action_type"] in counts:
+            counts[row["action_type"]] = row["count"]
     total = sum(counts.values())
     prefs = get_user_preferences(user_id)
     goal = prefs["daily_goal"]
-    return {"like": counts["like"], "dislike": counts["dislike"], "unsure": counts["unsure"], "duplicate": counts["duplicate"], "apply": counts["apply"], "total": total, "daily_goal": goal, "goal_progress": min(total / goal, 1.0) if goal > 0 else 1.0, "goal_met": total >= goal}
+    return {**counts, "total": total, "daily_goal": goal, "goal_progress": min(total / goal, 1.0) if goal > 0 else 1.0, "goal_met": total >= goal}
 
 def get_total_stats(user_id):
     rows = _action_counts_query(user_id, today_only=False)
-    counts = {a: 0 for a in ["like", "dislike", "unsure", "duplicate", "apply"]}
+    counts = {a: 0 for a in COUNTED_ACTIONS}
     for row in rows:
-        counts[row["action_type"]] = row["count"]
+        if row["action_type"] in counts:
+            counts[row["action_type"]] = row["count"]
     total = sum(counts.values())
     with closing(get_connection()) as conn:
         badges = conn.execute("SELECT COUNT(*) FROM user_badges WHERE user_id = ?", (user_id,)).fetchone()[0]
-    return {"like": counts["like"], "dislike": counts["dislike"], "unsure": counts["unsure"], "duplicate": counts["duplicate"], "apply": counts["apply"], "total": total, "badges_earned": badges, "total_points": get_total_points(user_id)}
+    return {**counts, "total": total, "badges_earned": badges, "total_points": get_total_points(user_id)}
 
 def get_streak(user_id):
     with closing(get_connection()) as conn:
-        rows = conn.execute("SELECT DISTINCT date(created_at) as action_date FROM user_session_stats WHERE user_id = ? ORDER BY action_date DESC", (user_id,)).fetchall()
-    if not rows:
+        placeholders = ", ".join("?" for _ in COUNTED_ACTIONS)
+        rows = conn.execute(
+            f"SELECT DISTINCT date(created_at) AS action_date FROM user_session_stats "
+            f"WHERE user_id = ? AND action_type IN ({placeholders}) ORDER BY action_date DESC",
+            (user_id, *sorted(COUNTED_ACTIONS)),
+        ).fetchall()
+        freeze_rows = conn.execute(
+            "SELECT used_on AS action_date FROM streak_freezes WHERE user_id = ?",
+            (user_id,),
+        ).fetchall()
+    if not rows and not freeze_rows:
         return {"current": 0, "longest": 0}
-    dates = [datetime.strptime(r["action_date"], "%Y-%m-%d").date() for r in rows]
+    dates = [
+        datetime.strptime(r["action_date"], "%Y-%m-%d").date()
+        for r in [*rows, *freeze_rows]
+        if r["action_date"]
+    ]
     today = date.today()
     date_set = set(dates)
     current = 0
@@ -821,6 +899,29 @@ def mark_job_seen(user_id, job_id, status, score=None):
         conn.execute("INSERT INTO user_job_state (user_id, job_id, status, score, last_seen_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(user_id, job_id) DO UPDATE SET status = excluded.status, score = COALESCE(excluded.score, score), last_seen_at = CURRENT_TIMESTAMP", (user_id, job_id, status, score))
         conn.commit()
 
+
+def undo_recorded_action(user_id, job_id, action_type=None):
+    """Remove the user's latest reversible stat and review marker for a job."""
+    with closing(get_connection()) as conn:
+        conn.execute(
+            """
+            DELETE FROM user_session_stats
+            WHERE id = (
+                SELECT id FROM user_session_stats
+                WHERE user_id = ? AND job_id = ?
+                  AND action_type IN ('like', 'dislike', 'unsure', 'expired')
+                  AND (? IS NULL OR action_type = ?)
+                ORDER BY id DESC LIMIT 1
+            )
+            """,
+            (user_id, job_id, action_type, action_type),
+        )
+        conn.execute(
+            "DELETE FROM user_job_state WHERE user_id = ? AND job_id = ?",
+            (user_id, job_id),
+        )
+        conn.commit()
+
 def get_seen_job_ids(user_id, status=None):
     with closing(get_connection()) as conn:
         if status:
@@ -877,7 +978,12 @@ def check_and_award_badges(user_id):
     for threshold, badge_key in [(2, "streak_2"), (3, "streak_3"), (5, "streak_5"), (7, "streak_7"), (14, "streak_14"), (30, "streak_30"), (60, "streak_60"), (100, "streak_100")]:
         if streak_current >= threshold: try_award(badge_key)
     with closing(get_connection()) as conn:
-        goal_hit_days = conn.execute("SELECT COUNT(*) FROM (SELECT date(created_at) as d FROM user_session_stats WHERE user_id = ? GROUP BY d HAVING COUNT(*) >= ?)", (user_id, prefs["daily_goal"])).fetchone()[0]
+        goal_hit_days = conn.execute(
+            f"SELECT COUNT(*) FROM (SELECT date(created_at) AS d FROM user_session_stats "
+            f"WHERE user_id = ? AND action_type IN ({COUNTED_ACTIONS_SQL}) "
+            "GROUP BY d HAVING COUNT(*) >= ?)",
+            (user_id, prefs["daily_goal"]),
+        ).fetchone()[0]
     for threshold, badge_key in [(1, "goal_hit_1"), (7, "goal_hit_7"), (30, "goal_hit_30"), (100, "goal_hit_100")]:
         if goal_hit_days >= threshold: try_award(badge_key)
     if today["total"] >= 5 and today["dislike"] == 0 and today["unsure"] == 0 and today["duplicate"] == 0: try_award("all_likes_day")
@@ -888,8 +994,16 @@ def check_and_award_badges(user_id):
     if now_hour >= 23: try_award("night_owl")
     if total_reviews >= 1:
         with closing(get_connection()) as conn:
-            first_action = conn.execute("SELECT date(created_at) FROM user_session_stats WHERE user_id = ? ORDER BY created_at LIMIT 1", (user_id,)).fetchone()
-            last_action = conn.execute("SELECT date(created_at) FROM user_session_stats WHERE user_id = ? ORDER BY created_at DESC LIMIT 1", (user_id,)).fetchone()
+            first_action = conn.execute(
+                f"SELECT date(created_at) FROM user_session_stats WHERE user_id = ? "
+                f"AND action_type IN ({COUNTED_ACTIONS_SQL}) ORDER BY created_at LIMIT 1",
+                (user_id,),
+            ).fetchone()
+            last_action = conn.execute(
+                f"SELECT date(created_at) FROM user_session_stats WHERE user_id = ? "
+                f"AND action_type IN ({COUNTED_ACTIONS_SQL}) ORDER BY created_at DESC LIMIT 1",
+                (user_id,),
+            ).fetchone()
             if first_action and last_action and first_action[0] != last_action[0]:
                 first_date = datetime.strptime(first_action[0], "%Y-%m-%d").date()
                 last_date = datetime.strptime(last_action[0], "%Y-%m-%d").date()
@@ -923,6 +1037,13 @@ def get_streak_freezes(user_id):
     return [dict(r) for r in rows]
 
 def use_streak_freeze(user_id, date_str):
+    try:
+        freeze_date = datetime.strptime(str(date_str), "%Y-%m-%d").date()
+    except (TypeError, ValueError) as exc:
+        raise ValueError("date must use YYYY-MM-DD format") from exc
+    if freeze_date > date.today():
+        raise ValueError("A streak freeze cannot be recorded in the future")
+    date_str = freeze_date.isoformat()
     with closing(get_connection()) as conn:
         existing = conn.execute(
             "SELECT id FROM streak_freezes WHERE user_id = ? AND used_on = ?",
@@ -947,7 +1068,7 @@ def get_user_skills(user_id):
         ).fetchall()
     return [dict(r) for r in rows]
 
-def upsert_skill_assessment(user_id, skill, self_rating=3, notes=None, market_demand=3):
+def upsert_skill_assessment(user_id, skill, self_rating=3, notes=None, market_demand=3, original_skill=None):
     """Insert or update a skill row and immediately recompute its demand.
 
     `market_demand` is a legacy manual value: kept only to satisfy the NOT NULL
@@ -957,16 +1078,30 @@ def upsert_skill_assessment(user_id, skill, self_rating=3, notes=None, market_de
     its Matching Jobs / Demand numbers right away instead of a blank until the
     next daemon cycle.
     """
+    skill = str(skill or "").strip()
+    if not skill:
+        raise ValueError("skill name is required")
+    try:
+        self_rating = int(self_rating)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("self_rating must be an integer from 1 to 5") from exc
+    if not 1 <= self_rating <= 5:
+        raise ValueError("self_rating must be between 1 and 5")
+    lookup_skill = str(original_skill or skill).strip()
+
     with closing(get_connection()) as conn:
         existing = conn.execute(
-            "SELECT id FROM skill_assessments WHERE user_id = ? AND skill = ?",
-            (user_id, skill),
+            "SELECT id FROM skill_assessments WHERE user_id = ? AND skill = ? COLLATE NOCASE",
+            (user_id, lookup_skill),
         ).fetchone()
         if existing:
-            conn.execute(
-                "UPDATE skill_assessments SET self_rating=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id = ?",
-                (self_rating, notes, existing["id"]),
-            )
+            try:
+                conn.execute(
+                    "UPDATE skill_assessments SET skill=?, self_rating=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id = ?",
+                    (skill, self_rating, notes, existing["id"]),
+                )
+            except sqlite3.IntegrityError as exc:
+                raise ValueError(f"A skill named '{skill}' already exists") from exc
             skill_id = existing["id"]
         else:
             conn.execute(
@@ -1009,6 +1144,10 @@ def get_cover_letters(user_id):
 
 def create_cover_letter(user_id, title, body, job_id=None):
     with closing(get_connection()) as conn:
+        if job_id is not None and conn.execute(
+            "SELECT 1 FROM jobs WHERE id = ?", (job_id,)
+        ).fetchone() is None:
+            raise KeyError("Job not found")
         conn.execute(
             "INSERT INTO cover_letters (user_id, title, body, job_id) VALUES (?, ?, ?, ?)",
             (user_id, title, body, job_id),
@@ -1039,20 +1178,21 @@ def get_analytics_summary(user_id):
         thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
         daily = conn.execute(
             "SELECT date(created_at) as d, COUNT(*) as total FROM user_session_stats "
-            "WHERE user_id = ? AND date(created_at) >= ? GROUP BY d ORDER BY d ASC",
+            f"WHERE user_id = ? AND action_type IN ({COUNTED_ACTIONS_SQL}) "
+            "AND date(created_at) >= ? GROUP BY d ORDER BY d ASC",
             (user_id, thirty_days_ago),
         ).fetchall()
         by_track = conn.execute(
             "SELECT j.track, COUNT(*) as total FROM user_session_stats s "
             "JOIN jobs j ON j.id = s.job_id "
-            "WHERE s.user_id = ? AND date(s.created_at) >= ? "
+            f"WHERE s.user_id = ? AND s.action_type IN ({COUNTED_ACTIONS_SQL}) AND date(s.created_at) >= ? "
             "GROUP BY j.track ORDER BY total DESC",
             (user_id, thirty_days_ago),
         ).fetchall()
         by_source = conn.execute(
             "SELECT j.source_tab, COUNT(*) as total FROM user_session_stats s "
             "JOIN jobs j ON j.id = s.job_id "
-            "WHERE s.user_id = ? AND date(s.created_at) >= ? "
+            f"WHERE s.user_id = ? AND s.action_type IN ({COUNTED_ACTIONS_SQL}) AND date(s.created_at) >= ? "
             "GROUP BY j.source_tab ORDER BY total DESC",
             (user_id, thirty_days_ago),
         ).fetchall()
